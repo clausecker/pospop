@@ -3,6 +3,7 @@ package pospop
 import "golang.org/x/sys/cpu"
 
 func count8avx2(counts *[8]int, buf []byte)
+func count8popcnt(counts *[8]int, buf []byte)
 func count8sse2(counts *[8]int, buf []byte)
 
 func init() {
@@ -12,7 +13,9 @@ func init() {
 		if x86.HasAVX2 {
 			count8 = count8avx2
 		} else {
-			count8 = count8sse2
+			count8 = count8popcnt
 		}
+	} else {
+		count8 = count8sse2
 	}
 }
