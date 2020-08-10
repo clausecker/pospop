@@ -91,7 +91,7 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	CSA(Y12, Y13, Y14, Y15)
 
 	ADDQ $15*32, SI
-#define D	48
+#define D	75
 	PREFETCHT0 (D+ 0)*32(SI)
 	PREFETCHT0 (D+ 2)*32(SI)
 	PREFETCHT0 (D+ 4)*32(SI)
