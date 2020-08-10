@@ -15,30 +15,6 @@
 	PXOR C, A \
 	POR  D, B
 
-// count the number of set MSB of the bytes of X into AX.
-#define COUNT(X) \
-	PMOVMSKB X, AX \
-	MOVL AX, DX \
-	SHRL $1, DX \
-	ANDL $0x5555, DX \
-	SUBL DX, AX \
-	MOVL AX, DX \
-	ANDL BX, AX \
-	SHRL $2, DX \
-	ANDL BX, DX \
-	ADDL DX, AX \
-	MOVL AX, DX \
-	SHRL $4, DX \
-	ADDL DX, AX \
-	ANDL $0x0f0f, AX \
-	ADDB AH, AL \
-	MOVBLZX AL, AX
-
-// same as COUNT, but shift X left afterwards.
-#define COUNTS(X) \
-	COUNT(X) \
-	PADDB X, X
-
 // magic constants for ACCUM and ACCUMS
 // 0x3333333333333333 is in BX.
 DATA magic<>+ 0(SB)/8, $0x5555555555555555
@@ -115,6 +91,27 @@ GLOBL magic<>(SB), RODATA|NOPTR, $24
 	IMULQ magic<>+16(SB), AX \
 	SHRQ $56, AX \
 	ADDQ AX, R
+
+// perform a population count of four words packed into AX
+// the result has population counts in every other byte and
+// garbage inbetween.
+#define PACKPOPCNT \
+	MOVQ AX, DX \
+	SHRQ $1, DX \
+	ANDQ magic<>(SB), DX \
+	SUBQ DX, AX \
+	MOVQ AX, DX \
+	ANDQ BX, AX \
+	SHRQ $2, DX \
+	ANDQ BX, DX \
+	ADDQ DX, AX \
+	MOVQ AX, DX \
+	SHRQ $4, DX \
+	ADDQ DX, AX \
+	ANDQ magic<>+8(SB), AX \
+	MOVQ AX, DX \
+	SHRQ $8, DX \
+	ADDQ DX, AX
 
 // func count8sse2(counts *[8]int, buf []byte)
 TEXT ·count8sse2(SB),NOSPLIT,$0-32
@@ -198,29 +195,66 @@ end15:	SUBQ $-14*16, CX		// undo last subtraction and
 vec1:	MOVOU (SI), X0			// load 16 bytes from buf
 	ADDQ $16, SI			// advance SI past them
 
-	COUNTS(X0)
-	ADDQ AX, R15
+	PMOVMSKB X0, AX
+	PADDB X0, X0
+	SHLL $16, AX
 
-	COUNTS(X0)
-	ADDQ AX, R14
+	PMOVMSKB X0, DX
+	PADDB X0, X0
+	ORL DX, AX
+	SHLQ $16, AX
 
-	COUNTS(X0)
-	ADDQ AX, R13
+	PMOVMSKB X0, DX
+	PADDB X0, X0
+	ORQ DX, AX
+	SHLQ $16, AX
 
-	COUNTS(X0)
-	ADDQ AX, R12
+	PMOVMSKB X0, DX
+	PADDB X0, X0
+	ORQ DX, AX
 
-	COUNTS(X0)
-	ADDQ AX, R11
+	PACKPOPCNT			// accumulate packed population counts in AX
+	MOVBLZX AL, DX
+	ADDQ DX, R12
+	SHRQ $16, AX
+	MOVBLZX AL, DX
+	ADDQ DX, R13
+	SHRQ $16, AX
+	MOVBLZX AL, DX	
+	ADDQ DX, R14
+	SHRL $16, AX
+	MOVBLZX AL, DX
+	ADDQ DX, R15
 
-	COUNTS(X0)
-	ADDQ AX, R10
+	PMOVMSKB X0, AX
+	PADDB X0, X0
+	SHLL $16, AX
 
-	COUNTS(X0)
-	ADDQ AX, R9
+	PMOVMSKB X0, DX
+	PADDB X0, X0
+	ORL DX, AX
+	SHLQ $16, AX
 
-	COUNT(X0)
-	ADDQ AX, R8
+	PMOVMSKB X0, DX
+	PADDB X0, X0
+	ORQ DX, AX
+	SHLQ $16, AX
+
+	PMOVMSKB X0, DX
+	ORQ DX, AX
+
+	PACKPOPCNT			// accumulate packed population counts in AX
+	MOVBLZX AL, DX
+	ADDQ DX, R8
+	SHRQ $16, AX
+	MOVBLZX AL, DX
+	ADDQ DX, R9
+	SHRQ $16, AX
+	MOVBLZX AL, DX	
+	ADDQ DX, R10
+	SHRL $16, AX
+	MOVBLZX AL, DX
+	ADDQ DX, R11
 
 	SUBQ $16, CX
 	JGE vec1			// repeat as long as bytes are left
