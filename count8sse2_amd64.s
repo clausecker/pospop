@@ -1,36 +1,120 @@
 #include "textflag.h"
 
-// 8 bit positiona population count using SSE.
-// Processes 16 bytes in one iteration, flushing the
-// buffer every 15 iterations.
-// Required feature flag: SSE2 (default).
+// 8 bit positional population count using just SSE2.
+// Processes 240 bytes at a time using a 15-fold
+// carry-save-adder reduction.
+// Required feature flags: SSE2 (default).
 
-// http://0x80.pl/articles/avx512-pospopcnt-8bit.html
+// B:A = A+B+C, D used for scratch space
+#define CSA(A, B, C, D) \
+	MOVOA A, D \
+	PAND B, D \
+	PXOR B, A \
+	MOVOA A, B \
+	PAND C, B \
+	PXOR C, A \
+	POR  D, B
 
-// mask of 0x01 repeated 16 times
-DATA ones<>+0(SB)/8, $0x0101010101010101
-DATA ones<>+8(SB)/8, $0x0101010101010101
-GLOBL ones<>(SB), RODATA|NOPTR, $16
+// count the number of set MSB of the bytes of X into AX.
+#define COUNT(X) \
+	PMOVMSKB X, AX \
+	MOVL AX, DX \
+	SHRL $1, DX \
+	ANDL $0x5555, DX \
+	SUBL DX, AX \
+	MOVL AX, DX \
+	ANDL BX, AX \
+	SHRL $2, DX \
+	ANDL BX, DX \
+	ADDL DX, AX \
+	MOVL AX, DX \
+	SHRL $4, DX \
+	ADDL DX, AX \
+	ANDL $0x0f0f, AX \
+	ADDB AH, AL \
+	MOVBLZX AL, AX
 
-// add the LSBs of X' bytes into S
-#define ACCUM(X, S) \
-	MOVOA X7, X3 \
-	PAND X, X3 \
-	PADDB X3, S
+// same as COUNT, but shift X left afterwards.
+#define COUNTS(X) \
+	COUNT(X) \
+	PADDB X, X
 
-// same as ACCUM, but also shift X left by 1
-#define ACCUMS(X, S) \
-	ACCUM(X, S) \
-	PSRLL $1, X0
+// magic constants for ACCUM and ACCUMS
+// 0x3333333333333333 is in BX.
+DATA magic<>+ 0(SB)/8, $0x5555555555555555
+DATA magic<>+ 8(SB)/8, $0x0f0f0f0f0f0f0f0f
+DATA magic<>+16(SB)/8, $0x0101020204040808
+GLOBL magic<>(SB), RODATA|NOPTR, $24
 
-// horizontally sum bytes in X and add to counter R.
-// Then clear counter R.
-#define	COUNT(X, R) \
-	PSADBW X6, X \
-	PSHUFD $0xfe, X0, X1 \
-	PADDD X1, X0 \
-	MOVL X0, DX \
-	ADDQ DX, R
+// count the number of MSB set in X4:X3:X1:X0
+// and accumulate into R
+// uses a modified (!) "parallel popcount" algorithm.
+// The MSBs of X4, X4, X1, and X0 are concatenated into AX.
+// Then, the population count is taken using a modified
+// "parallel popcount" algorithm.  The modification pertains
+// the final step which has been changed such that the place
+// value of X0, X1, X3, and X4 are accounted for.
+// It is assumed that BX holds 0x3333333333333333.
+#define ACCUM(R) \
+	PMOVMSKB X4, AX \
+	SHLL $16, AX \
+	PMOVMSKB X3, DX \
+	ORL DX, AX \
+	SHLQ $16, AX \
+	PMOVMSKB X1, DX \
+	ORQ DX, AX \
+	SHLQ $16, AX \
+	PMOVMSKB X0, DX \
+	ORQ DX, AX \
+	MOVQ AX, DX \
+	SHRQ $1, DX \
+	ANDQ magic<>(SB), DX \
+	SUBQ DX, AX \
+	MOVQ AX, DX \
+	ANDQ BX, AX \
+	SHRQ $2, DX \
+	ANDQ BX, DX \
+	ADDQ DX, AX \
+	MOVQ AX, DX \
+	SHRQ $4, DX \
+	ADDQ DX, AX \
+	ANDQ magic<>+8(SB), AX \
+	IMULQ magic<>+16(SB), AX \
+	SHRQ $56, AX \
+	ADDQ AX, R
+
+// same as ACCUM, but use COUNTS instead of COUNT
+#define ACCUMS(R) \
+	PMOVMSKB X4, AX \
+	PADDB X4, X4 \
+	SHLL $16, AX \
+	PMOVMSKB X3, DX \
+	PADDB X3, X3 \
+	ORL DX, AX \
+	SHLQ $16, AX \
+	PMOVMSKB X1, DX \
+	PADDB X1, X1 \
+	ORQ DX, AX \
+	SHLQ $16, AX \
+	PMOVMSKB X0, DX \
+	PADDB X0, X0 \
+	ORQ DX, AX \
+	MOVQ AX, DX \
+	SHRQ $1, DX \
+	ANDQ magic<>(SB), DX \
+	SUBQ DX, AX \
+	MOVQ AX, DX \
+	ANDQ BX, AX \
+	SHRQ $2, DX \
+	ANDQ BX, DX \
+	ADDQ DX, AX \
+	MOVQ AX, DX \
+	SHRQ $4, DX \
+	ADDQ DX, AX \
+	ANDQ magic<>+8(SB), AX \
+	IMULQ magic<>+16(SB), AX \
+	SHRQ $56, AX \
+	ADDQ AX, R
 
 // func count8sse2(counts *[8]int, buf []byte)
 TEXT ·count8sse2(SB),NOSPLIT,$0-32
@@ -38,7 +122,7 @@ TEXT ·count8sse2(SB),NOSPLIT,$0-32
 	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 
-	// load counts into registers R8--R15
+	// load counts into register R8--R15
 	MOVQ 8*0(DI), R8
 	MOVQ 8*1(DI), R9
 	MOVQ 8*2(DI), R10
@@ -48,71 +132,100 @@ TEXT ·count8sse2(SB),NOSPLIT,$0-32
 	MOVQ 8*6(DI), R14
 	MOVQ 8*7(DI), R15
 
-	SUBQ $16*2, CX			// pre-decrement CX
-	JL ssefin			// nothing left to do?
+	MOVQ $0x3333333333333333, BX	// magic constant for popcount
 
-	MOVOU ones<>(SB), X7		// bit mask of all ones
-	PXOR X6, X6			// zeroed-out register
+	SUBQ $15*16, CX			// pre-decrement CX
+	JL end15
 
-loop:	MOVL $126, AX			// remaining space in buffer
-	PXOR X8, X8			// X8..X15: partial counts
-	PXOR X9, X9
-	PXOR X10, X10
-	PXOR X11, X11
-	PXOR X12, X12
-	PXOR X13, X13
-	PXOR X14, X14
-	PXOR X15, X15
 
-accum:	MOVOU 16*0(SI), X0		// load 32 bytes into X0 and X2
-	MOVOU 16*1(SI), X1
-	ADDQ $16*2, SI			// advance SI
-	PREFETCHT0 16*16(SI)
+vec15:	MOVOU 0*16(SI), X0		// load 240 bytes from buf into X0--X14
+	MOVOU 1*16(SI), X1
+	MOVOU 2*16(SI), X2
+	CSA(X0, X1, X2, X15)
 
-	ACCUMS(X0, X8)
-	ACCUMS(X1, X8)
+	MOVOU 3*16(SI), X3
+	MOVOU 4*16(SI), X4
+	MOVOU 5*16(SI), X5
+	CSA(X3, X4, X5, X15)
 
-	ACCUMS(X0, X9)
-	ACCUMS(X1, X9)
+	MOVOU 6*16(SI), X6
+	MOVOU 7*16(SI), X7
+	MOVOU 8*16(SI), X8
+	CSA(X6, X7, X8, X15)
 
-	ACCUMS(X0, X10)
-	ACCUMS(X1, X10)
+	MOVOU 9*16(SI), X9
+	MOVOU 10*16(SI), X10
+	MOVOU 11*16(SI), X11
+	CSA(X9, X10, X11, X15)
 
-	ACCUMS(X0, X11)
-	ACCUMS(X1, X11)
+	MOVOU 12*16(SI), X12
+	MOVOU 13*16(SI), X13
+	MOVOU 14*16(SI), X14
+	CSA(X12, X13, X14, X15)
 
-	ACCUMS(X0, X12)
-	ACCUMS(X1, X12)
+	ADDQ $15*16, SI
+#define D	48
+	PREFETCHT0 (D+ 0)*16(SI)
+	PREFETCHT0 (D+ 4)*16(SI)
+	PREFETCHT0 (D+ 8)*16(SI)
+	PREFETCHT0 (D+12)*16(SI)
 
-	ACCUMS(X0, X13)
-	ACCUMS(X1, X13)
+	CSA(X0, X3, X6, X15)
+	CSA(X1, X4, X7, X15)
+	CSA(X0, X9, X12, X15)
+	CSA(X1, X3, X10, X15)
+	CSA(X1, X9, X13, X15)
+	CSA(X3, X4, X9, X15)
 
-	ACCUMS(X0, X14)
-	ACCUMS(X1, X14)
+	// X4:X3:X1:X0 = X0+X1+...+X14
 
-	ACCUM(X0, X15)
-	ACCUM(X1, X15)
+	ACCUMS(R15)
+	ACCUMS(R14)
+	ACCUMS(R13)
+	ACCUMS(R12)
+	ACCUMS(R11)
+	ACCUMS(R10)
+	ACCUMS(R9)
+	ACCUM(R8)
 
-	SUBQ $16*2, CX			// account for the data we loaded
-	JL full				// if out of data, accumulate rest
+	SUBQ $15*16, CX
+	JGE vec15			// repeat as long as bytes are left
 
-	SUBL $1, AX			// account buffer fill
-	JNZ accum
+end15:	SUBQ $-14*16, CX		// undo last subtraction and
+					// pre-subtract 16 bit from CX
+	JL end1
 
-	// buffers full: process X8...X15 into R8..R15
-full:	COUNT(X8, R8)
-	COUNT(X9, R9)
-	COUNT(X10, R10)
-	COUNT(X11, R11)
-	COUNT(X12, R12)
-	COUNT(X13, R13)
-	COUNT(X14, R14)
-	COUNT(X15, R15)
+vec1:	MOVOU (SI), X0			// load 16 bytes from buf
+	ADDQ $16, SI			// advance SI past them
 
-	TESTQ CX, CX			// any data left to process?
-	JNS loop
+	COUNTS(X0)
+	ADDQ AX, R15
 
-ssefin:	ADDQ $2*16, CX			// undo last subtraction
+	COUNTS(X0)
+	ADDQ AX, R14
+
+	COUNTS(X0)
+	ADDQ AX, R13
+
+	COUNTS(X0)
+	ADDQ AX, R12
+
+	COUNTS(X0)
+	ADDQ AX, R11
+
+	COUNTS(X0)
+	ADDQ AX, R10
+
+	COUNTS(X0)
+	ADDQ AX, R9
+
+	COUNT(X0)
+	ADDQ AX, R8
+
+	SUBQ $16, CX
+	JGE vec1			// repeat as long as bytes are left
+
+end1:	ADDQ $16, CX			// undo last subtraction
 	JE end				// if CX=0, there's nothing left
 
 scalar:	MOVBLZX (SI), AX		// load a byte from buf
