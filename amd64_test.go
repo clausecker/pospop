@@ -14,6 +14,15 @@ func TestCount8AVX2(t *testing.T) {
 	testCount8(t, count8avx2)
 }
 
+// benchmark count8avx2
+func BenchmarkCount8AVX2(b *testing.B) {
+	if !cpu.X86.HasAVX2 || !cpu.X86.HasPOPCNT {
+		b.SkipNow()
+	}
+
+	benchmarkCount8(b, count8avx2)
+}
+
 // test count8popcnt
 func TestCount8POPCNT(t *testing.T) {
 	if !cpu.X86.HasSSE2 || !cpu.X86.HasPOPCNT {
@@ -23,7 +32,21 @@ func TestCount8POPCNT(t *testing.T) {
 	testCount8(t, count8popcnt)
 }
 
+// benchmark count8popcnt
+func BenchmarkCount8POPCNT(b *testing.B) {
+	if !cpu.X86.HasSSE2 || !cpu.X86.HasPOPCNT {
+		b.SkipNow()
+	}
+
+	benchmarkCount8(b, count8popcnt)
+}
+
 // test count8sse2
 func TestCount8SSE2(t *testing.T) {
 	testCount8(t, count8sse2)
+}
+
+// benchmark count8sse2
+func BenchmarkCount8SSE2(b *testing.B) {
+	benchmarkCount8(b, count8sse2)
 }
