@@ -13,7 +13,6 @@ var testLengths = []int{
 	127, 128, 129,
 	1023, 1024, 1025,
 }
-	
 
 // fill counts with random integers
 func randomCounts(counts []int) {
@@ -31,8 +30,8 @@ func refCount8(counts *[8]int, buf []uint8) {
 	}
 }
 
-// test the correctness of Count8
-func TestCount8(t *testing.T) {
+// test the correctness of a count8 implementation
+func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 	for _, len := range testLengths {
 		buf := make([]uint8, len)
 		for i := range buf {
@@ -43,7 +42,7 @@ func TestCount8(t *testing.T) {
 		randomCounts(counts[:])
 		refCounts := counts
 
-		Count8(&counts, buf)
+		count8(&counts, buf)
 		refCount8(&refCounts, buf)
 
 		if counts != refCounts {
@@ -61,8 +60,8 @@ func refCount16(counts *[16]int, buf []uint16) {
 	}
 }
 
-// test the correctness of Count16
-func TestCount16(t *testing.T) {
+// test the correctness of a count16 implementation
+func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 	for _, len := range testLengths {
 		buf := make([]uint16, len)
 		for i := range buf {
@@ -73,7 +72,7 @@ func TestCount16(t *testing.T) {
 		randomCounts(counts[:])
 		refCounts := counts
 
-		Count16(&counts, buf)
+		count16(&counts, buf)
 		refCount16(&refCounts, buf)
 
 		if counts != refCounts {
@@ -91,8 +90,8 @@ func refCount32(counts *[32]int, buf []uint32) {
 	}
 }
 
-// test the correctness of Count32
-func TestCount32(t *testing.T) {
+// test the correctness of a count32 implementation
+func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 	for _, len := range testLengths {
 		buf := make([]uint32, len)
 		for i := range buf {
@@ -103,7 +102,7 @@ func TestCount32(t *testing.T) {
 		randomCounts(counts[:])
 		refCounts := counts
 
-		Count32(&counts, buf)
+		count32(&counts, buf)
 		refCount32(&refCounts, buf)
 
 		if counts != refCounts {
@@ -122,7 +121,7 @@ func refCount64(counts *[64]int, buf []uint64) {
 }
 
 // test the correctness of Count8
-func TestCount64(t *testing.T) {
+func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 	for _, len := range testLengths {
 		buf := make([]uint64, len)
 		for i := range buf {
@@ -133,11 +132,51 @@ func TestCount64(t *testing.T) {
 		randomCounts(counts[:])
 		refCounts := counts
 
-		Count64(&counts, buf)
+		count64(&counts, buf)
 		refCount64(&refCounts, buf)
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match", len)
 		}
 	}
+}
+
+// test the correctness of count8generic
+func TestCount8Generic(t *testing.T) {
+	testCount8(t, count8generic)
+}
+
+// test the correctness of Count8
+func TestCount8(t *testing.T) {
+	testCount8(t, Count8)
+}
+
+// test the correctness of count16generic
+func TestCount16Generic(t *testing.T) {
+	testCount16(t, count16generic)
+}
+
+// test the correctness of Count16
+func TestCount16(t *testing.T) {
+	testCount16(t, Count16)
+}
+
+// test the correctness of count32generic
+func TestCount32Generic(t *testing.T) {
+	testCount32(t, count32generic)
+}
+
+// test the correctness of Count32
+func TestCount32(t *testing.T) {
+	testCount32(t, Count32)
+}
+
+// test the correctness of count64generic
+func TestCount64Generic(t *testing.T) {
+	testCount64(t, count64generic)
+}
+
+// test the correctness of Count64
+func TestCount(t *testing.T) {
+	testCount64(t, Count64)
 }
