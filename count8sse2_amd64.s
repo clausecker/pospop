@@ -259,8 +259,8 @@ vec1:	MOVOU (SI), X0			// load 16 bytes from buf
 	SUBQ $16, CX
 	JGE vec1			// repeat as long as bytes are left
 
-end1:	ADDQ $16, CX			// undo last subtraction
-	JE end				// if CX=0, there's nothing left
+end1:	SUBQ $-16, CX			// undo last subtraction
+	JLE end				// if CX<=0, there's nothing left
 
 scalar:	MOVBLZX (SI), AX		// load a byte from buf
 	INCQ SI				// advance past it

@@ -157,8 +157,8 @@ vec1:	VMOVDQU (SI), Y0		// load 32 bytes from buf
 	JGE vec1			// repeat as long as bytes are left
 
 end1:	VZEROUPPER			// restore SSE-compatibility
-	ADDQ $32, CX			// undo last subtraction
-	JE end				// if CX=0, there's nothing left
+	SUBQ $-32, CX			// undo last subtraction
+	JLE end				// if CX<=0, there's nothing left
 
 scalar:	MOVBLZX (SI), AX		// load a byte from buf
 	INCQ SI				// advance past it
