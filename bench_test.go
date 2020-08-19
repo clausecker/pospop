@@ -45,7 +45,7 @@ func BenchmarkCount8(b *testing.B) {
 	for _, impl := range funcs {
 		b.Run(impl.name, func(bb *testing.B) {
 			if !impl.available {
-				bb.Skip()
+				bb.SkipNow()
 			}
 
 			benchmarkCount8(bb, lengths, impl.count8)

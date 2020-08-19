@@ -113,7 +113,7 @@ func TestCount8(t *testing.T) {
 	for i := range count8funcs {
 		t.Run(count8funcs[i].name, func(tt *testing.T) {
 			if !count8funcs[i].available {
-				t.Skip()
+				tt.SkipNow()
 			}
 
 			testCount8(tt, count8funcs[i].count8)
@@ -128,7 +128,7 @@ func TestCount16(t *testing.T) {
 	for i := range count16funcs {
 		t.Run(count16funcs[i].name, func(tt *testing.T) {
 			if !count16funcs[i].available {
-				t.Skip()
+				tt.SkipNow()
 			}
 
 			testCount16(tt, count16funcs[i].count16)
@@ -143,7 +143,7 @@ func TestCount32(t *testing.T) {
 	for i := range count32funcs {
 		t.Run(count32funcs[i].name, func(tt *testing.T) {
 			if !count32funcs[i].available {
-				t.Skip()
+				tt.SkipNow()
 			}
 
 			testCount32(tt, count32funcs[i].count32)
@@ -158,7 +158,7 @@ func TestCount64(t *testing.T) {
 	for i := range count64funcs {
 		t.Run(count64funcs[i].name, func(tt *testing.T) {
 			if !count64funcs[i].available {
-				t.Skip()
+				tt.SkipNow()
 			}
 
 			testCount64(tt, count64funcs[i].count64)
