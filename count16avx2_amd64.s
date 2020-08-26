@@ -13,20 +13,6 @@
 	VPXOR A, C, A \
 	VPOR  B, D, B
 
-// count the number of set MSB of the bytes of Y into R1 and R2.
-// the even (higher) bytes go into R2, the odd (lower) bytes into R1.
-#define COUNT(Y, R1, R2) \
-	VPMOVMSKB Y, R2 \
-	POPCNTL R2, R1 \
-	ANDL $0xaaaaaaaa, R2 \
-	POPCNTL R2, R2 \
-	SUBL R2, R1
-
-// same as COUNT, but shift Y left afterwards.
-#define COUNTS(Y, R1, R2) \
-	COUNT(Y, R1, R2) \
-	VPADDB Y, Y, Y
-
 // magic transposition constants, comparison constants
 DATA magic<>+ 0(SB)/8, $0x8040201008040201
 DATA magic<>+ 8(SB)/4, $0x00aa00aa
@@ -51,14 +37,6 @@ GLOBL magic<>(SB), RODATA|NOPTR, $24
 	VPXOR Y, Y12, Y \
 	VPSLLD S, Y12, Y12 \
 	VPXOR Y, Y12, Y
-
-// process two bits by shifting right AX and then adding
-// the carry to A and B
-#define SCALAR(A, B) \
-	SHRL $1, AX \
-	ADCQ $0, A \
-	SHRL $1, AX \
-	ADCQ $0, B
 
 // func count8avx2(counts *[16]int, buf []uint16)
 TEXT ·count16avx2(SB),NOSPLIT,$0-32
