@@ -27,11 +27,13 @@
 	COUNT(Y, R1, R2) \
 	VPADDB Y, Y, Y
 
-// magic transposition constants
-DATA magic<>+0(SB)/4, $0x00aa00aa
-DATA magic<>+4(SB)/4, $0x0000cccc
-DATA magic<>+8(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $12
+// magic transposition constants, comparison constants
+DATA magic<>+ 0(SB)/8, $0x8040201008040201
+DATA magic<>+ 8(SB)/4, $0x00aa00aa
+DATA magic<>+12(SB)/4, $0x0000cccc
+DATA magic<>+16(SB)/4, $0x0f0f0f0f
+DATA magic<>+20(SB)/4, $0x01010101
+GLOBL magic<>(SB), RODATA|NOPTR, $24
 
 // pseudo-transpose the 4x8 bit matrices in Y.  Transforms
 // Y = D7D6D5D4 D3D2D1D0 C7C6C5C4 C3C2C1C0 B7B6B5B4 B3B2B1B0 A7A6A5A4 A3A2A1A0
@@ -112,9 +114,9 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 
 	// Y4:Y3:Y1:Y0 = Y0+Y1+...+Y14
 
-	VPBROADCASTD magic<>+0(SB), Y14	// for TRANSPOSE
-	VPBROADCASTD magic<>+4(SB), Y15	// for TRANSPOSE
-	VPBROADCASTD magic<>+8(SB), Y13	// low nibbles
+	VPBROADCASTD magic<>+ 8(SB), Y14	// for TRANSPOSE
+	VPBROADCASTD magic<>+12(SB), Y15	// for TRANSPOSE
+	VPBROADCASTD magic<>+16(SB), Y13	// low nibbles
 
 	// Y4:Y3:Y1:Y0 = Y0+Y1+...+Y14
 
@@ -186,93 +188,56 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	VMOVDQU Y10, 2*32(DI)
 
 	VPMOVZXBQ X0, Y1
-	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y11, Y11
 	VMOVDQU Y11, 3*32(DI)
 
 	SUBQ $15*(32/2), CX
 	JGE vec15			// repeat as long as bytes are left
 
-end15:	SUBQ $-14*(32/2), CX		// undo last subtraction and
-					// pre-subtract 32 bit from CX
+end15:	SUBQ $(2/2)-15*(32/2), CX	// undo last subtraction and
+	JL end1				// pre-subtract 2 byte from CX
 
-	// load every other counter into register R8--R15
-	MOVQ 8*0(DI), R8
-	MOVQ 8*2(DI), R9
-	MOVQ 8*4(DI), R10
-	MOVQ 8*6(DI), R11
-	MOVQ 8*8(DI), R12
-	MOVQ 8*10(DI), R13
-	MOVQ 8*12(DI), R14
-	MOVQ 8*14(DI), R15
+	// scalar tail: process two bytes at a time
+	VMOVDQU 0*32(DI), Y8		// 4 qword sized counters each
+	VMOVDQU 1*32(DI), Y9
+	VMOVDQU 2*32(DI), Y10
+	VMOVDQU 3*32(DI), Y11
 
-	JL end1
+	VPXOR X0, X0, X0		// X1: 16 byte sized counters
+	VPBROADCASTQ magic<>+0(SB), X2	// X2: mask of bits positions
+	VMOVD magic<>+20(SB), X3	// X3: permutation vector to broadcast
+	VPSHUFD $0x05, X3, X3		// one byte into low 8 bytes and another
+					// bytes into the high 8 bytes
 
-vec1:	VMOVDQU (SI), Y0		// load 32 bytes from buf
-	ADDQ $32, SI			// advance SI past them
+scalar:	VPBROADCASTW (SI), X1		// load two bytes from the buffer
+	ADDQ $2, SI			// advance buffer past the loaded bytes
+	VPSHUFB X3, X1, X1		// shuffle them around as needed
+	VPAND X2, X1, X1		// mask out the desired bytes
+	VPCMPEQB X2, X1, X1		// set byte to -1 if corresponding bit set
+	VPSUBB X1, X0, X0		// and subtract from the counters
 
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, 8*7(DI)
-	ADDQ DX, 8*15(DI)
+	SUBQ $1, CX			// decrement counter and loop
+	JGE scalar
 
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, R11
-	ADDQ DX, R15
+	// add to counters
+	VPMOVZXBQ X0, Y1
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y1, Y8, Y8
+	VMOVDQU Y8, 0*32(DI)
 
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, 8*5(DI)
-	ADDQ DX, 8*13(DI)
+	VPMOVZXBQ X0, Y1
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y1, Y9, Y9
+	VMOVDQU Y9, 1*32(DI)
 
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, R10
-	ADDQ DX, R14
+	VPMOVZXBQ X0, Y1
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y1, Y10, Y10
+	VMOVDQU Y10, 2*32(DI)
 
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, 8*3(DI)
-	ADDQ DX, 8*11(DI)
+	VPMOVZXBQ X0, Y1
+	VPADDQ Y1, Y11, Y11
+	VMOVDQU Y11, 3*32(DI)
 
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, R9
-	ADDQ DX, R13
-
-	COUNTS(Y0, AX, DX)
-	ADDQ AX, 8*1(DI)
-	ADDQ DX, 8*9(DI)
-
-	COUNT(Y0, AX, DX)
-	ADDQ AX, R8
-	ADDQ DX, R12
-
-	SUBQ $32/2, CX
-	JGE vec1			// repeat as long as bytes are left
-
-end1:	VZEROUPPER			// restore SSE-compatibility
-	SUBQ $-(32/2), CX		// undo last subtraction
-	JLE end				// if CX<=0, there's nothing left
-
-scalar:	MOVWLZX (SI), AX		// load two bytes from buf
-	ADDQ $2, SI			// advance past it
-
-	SCALAR(R8, 8*1(DI))
-	SCALAR(R9, 8*3(DI))
-	SCALAR(R10, 8*5(DI))
-	SCALAR(R11, 8*7(DI))
-	SCALAR(R12, 8*9(DI))
-	SCALAR(R13, 8*11(DI))
-	SCALAR(R14, 8*13(DI))
-	SCALAR(R15, 8*15(DI))
-
-	DECQ CX				// mark this byte as done
-	JNE scalar			// and proceed if any bytes are left
-
-	// write R8--R15 back to counts
-end:	MOVQ R8, 8*0(DI)
-	MOVQ R9, 8*2(DI)
-	MOVQ R10, 8*4(DI)
-	MOVQ R11, 8*6(DI)
-	MOVQ R12, 8*8(DI)
-	MOVQ R13, 8*10(DI)
-	MOVQ R14, 8*12(DI)
-	MOVQ R15, 8*14(DI)
-
+end1:	VZEROUPPER
 	RET
