@@ -66,33 +66,45 @@ TEXT ·count16avx2(SB),NOSPLIT,$0-32
 	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 
+	// counters, 4 in each register
+	VMOVDQU 0*32(DI), Y8
+	VMOVDQU 1*32(DI), Y9
+	VMOVDQU 2*32(DI), Y10
+	VMOVDQU 3*32(DI), Y11
+
 	SUBQ $15*32/2, CX			// pre-decrement CX
 	JL end15
 
-vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
-	VMOVDQU 1*32(SI), Y1
-	VMOVDQU 2*32(SI), Y2
-	CSA(Y0, Y1, Y2, Y15)
+	VPBROADCASTD magic<>+ 8(SB), Y14	// for TRANSPOSE
+	VPBROADCASTD magic<>+12(SB), Y15	// for TRANSPOSE
+	VPBROADCASTD magic<>+16(SB), Y13	// low nibbles
 
-	VMOVDQU 3*32(SI), Y3
-	VMOVDQU 4*32(SI), Y4
+vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
+	VMOVDQU 1*32(SI), Y1		// and sum them into Y3:Y2:Y1:Y0
+	VMOVDQU 2*32(SI), Y4
+	VMOVDQU 3*32(SI), Y2
+	VMOVDQU 4*32(SI), Y3
 	VMOVDQU 5*32(SI), Y5
-	CSA(Y3, Y4, Y5, Y15)
-
 	VMOVDQU 6*32(SI), Y6
-	VMOVDQU 7*32(SI), Y7
-	VMOVDQU 8*32(SI), Y8
-	CSA(Y6, Y7, Y8, Y15)
-
-	VMOVDQU 9*32(SI), Y9
-	VMOVDQU 10*32(SI), Y10
-	VMOVDQU 11*32(SI), Y11
-	CSA(Y9, Y10, Y11, Y15)
-
-	VMOVDQU 12*32(SI), Y12
-	VMOVDQU 13*32(SI), Y13
-	VMOVDQU 14*32(SI), Y14
-	CSA(Y12, Y13, Y14, Y15)
+	CSA(Y0, Y1, Y4, Y7)
+	VMOVDQU 7*32(SI), Y4
+	CSA(Y3, Y2, Y5, Y7)
+	VMOVDQU 8*32(SI), Y5
+	CSA(Y0, Y3, Y6, Y7)
+	VMOVDQU 9*32(SI), Y6
+	CSA(Y1, Y2, Y3, Y7)
+	VMOVDQU 10*32(SI), Y3
+	CSA(Y0, Y4, Y5, Y7)
+	VMOVDQU 11*32(SI), Y5
+	CSA(Y0, Y3, Y6, Y7)
+	VMOVDQU 12*32(SI), Y6
+	CSA(Y1, Y3, Y4, Y7)
+	VMOVDQU 13*32(SI), Y4
+	CSA(Y0, Y5, Y6, Y7)
+	VMOVDQU 14*32(SI), Y6
+	CSA(Y0, Y4, Y6, Y7)
+	CSA(Y1, Y4, Y5, Y7)
+	CSA(Y2, Y3, Y4, Y7)
 
 	ADDQ $15*32, SI
 #define D	75
@@ -105,27 +117,12 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	PREFETCHT0 (D+12)*32(SI)
 	PREFETCHT0 (D+14)*32(SI)
 
-	CSA(Y0, Y3, Y6, Y15)
-	CSA(Y1, Y4, Y7, Y15)
-	CSA(Y0, Y9, Y12, Y15)
-	CSA(Y1, Y3, Y10, Y15)
-	CSA(Y1, Y9, Y13, Y15)
-	CSA(Y3, Y4, Y9, Y15)
-
-	// Y4:Y3:Y1:Y0 = Y0+Y1+...+Y14
-
-	VPBROADCASTD magic<>+ 8(SB), Y14	// for TRANSPOSE
-	VPBROADCASTD magic<>+12(SB), Y15	// for TRANSPOSE
-	VPBROADCASTD magic<>+16(SB), Y13	// low nibbles
-
-	// Y4:Y3:Y1:Y0 = Y0+Y1+...+Y14
-
 	// shuffle registers such that Y3:Y2:Y1:Y0 contains dwords
 	// of the form 0xDDCCBBAA
-	VPUNPCKLBW Y4, Y3, Y6		// Y6 = DDCCDDCC (lo)
-	VPUNPCKHBW Y4, Y3, Y7		// Y7 = DDCCDDCC (hi)
 	VPUNPCKLBW Y1, Y0, Y4		// Y4 = BBAABBAA (lo)
 	VPUNPCKHBW Y1, Y0, Y5		// Y5 = BBAABBAA (hi)
+	VPUNPCKLBW Y3, Y2, Y6		// Y6 = DDCCDDCC (lo)
+	VPUNPCKHBW Y3, Y2, Y7		// Y7 = DDCCDDCC (hi)
 	VPUNPCKLWD Y6, Y4, Y0		// Y0 = DDCCBBAA (0)
 	VPUNPCKHWD Y6, Y4, Y1		// Y1 = DDCCBBAA (1)
 	VPUNPCKLWD Y7, Y5, Y2		// Y2 = DDCCBBAA (2)
@@ -136,12 +133,6 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	TRANSPOSE(Y1)
 	TRANSPOSE(Y2)
 	TRANSPOSE(Y3)
-
-	// pre-load counters into some spare registers
-	VMOVDQU 0*32(DI), Y8
-	VMOVDQU 1*32(DI), Y9
-	VMOVDQU 2*32(DI), Y10
-	VMOVDQU 3*32(DI), Y11
 
 	// pull out low nibbles from matrices
 	VPAND Y0, Y13, Y4
@@ -175,21 +166,17 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	VPMOVZXBQ X0, Y1
 	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y8, Y8
-	VMOVDQU Y8, 0*32(DI)
 
 	VPMOVZXBQ X0, Y1
 	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y9, Y9
-	VMOVDQU Y9, 1*32(DI)
 
 	VPMOVZXBQ X0, Y1
 	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y10, Y10
-	VMOVDQU Y10, 2*32(DI)
 
 	VPMOVZXBQ X0, Y1
 	VPADDQ Y1, Y11, Y11
-	VMOVDQU Y11, 3*32(DI)
 
 	SUBQ $15*(32/2), CX
 	JGE vec15			// repeat as long as bytes are left
@@ -198,11 +185,6 @@ end15:	SUBQ $(2/2)-15*(32/2), CX	// undo last subtraction and
 	JL end1				// pre-subtract 2 byte from CX
 
 	// scalar tail: process two bytes at a time
-	VMOVDQU 0*32(DI), Y8		// 4 qword sized counters each
-	VMOVDQU 1*32(DI), Y9
-	VMOVDQU 2*32(DI), Y10
-	VMOVDQU 3*32(DI), Y11
-
 	VPXOR X0, X0, X0		// X1: 16 byte sized counters
 	VPBROADCASTQ magic<>+0(SB), X2	// X2: mask of bits positions
 	VMOVD magic<>+20(SB), X3	// X3: permutation vector to broadcast
@@ -223,21 +205,23 @@ scalar:	VPBROADCASTW (SI), X1		// load two bytes from the buffer
 	VPMOVZXBQ X0, Y1
 	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y8, Y8
-	VMOVDQU Y8, 0*32(DI)
 
 	VPMOVZXBQ X0, Y1
 	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y9, Y9
-	VMOVDQU Y9, 1*32(DI)
 
 	VPMOVZXBQ X0, Y1
 	VPSRLDQ $4, X0, X0
 	VPADDQ Y1, Y10, Y10
-	VMOVDQU Y10, 2*32(DI)
 
 	VPMOVZXBQ X0, Y1
 	VPADDQ Y1, Y11, Y11
+
+	// write counters back
+end1:	VMOVDQU Y8, 0*32(DI)
+	VMOVDQU Y9, 1*32(DI)
+	VMOVDQU Y10, 2*32(DI)
 	VMOVDQU Y11, 3*32(DI)
 
-end1:	VZEROUPPER
+	VZEROUPPER
 	RET
