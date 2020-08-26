@@ -47,11 +47,18 @@
 	LEAL (BX)(AX*4), AX \
 	ADDQ AX, R
 
+// magic counting constant
+DATA magic<>(SB)/8, $0x8040201008040201
+GLOBL magic<>(SB), RODATA|NOPTR, $8
+
 // func count8avx2(counts *[8]int, buf []byte)
 TEXT ·count8avx2(SB),NOSPLIT,$0-32
 	MOVQ counts+0(FP), DI
 	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
+
+	SUBQ $15*32, CX			// pre-decrement CX
+	JL end15
 
 	// load counts into register R8--R15
 	MOVQ 8*0(DI), R8
@@ -62,9 +69,6 @@ TEXT ·count8avx2(SB),NOSPLIT,$0-32
 	MOVQ 8*5(DI), R13
 	MOVQ 8*6(DI), R14
 	MOVQ 8*7(DI), R15
-
-	SUBQ $15*32, CX			// pre-decrement CX
-	JL end15
 
 vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	VMOVDQU 1*32(SI), Y1
@@ -123,76 +127,8 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	SUBQ $15*32, CX
 	JGE vec15			// repeat as long as bytes are left
 
-end15:	SUBQ $-14*32, CX		// undo last subtraction and
-					// pre-subtract 32 bit from CX
-	JL end1
-
-vec1:	VMOVDQU (SI), Y0		// load 32 bytes from buf
-	ADDQ $32, SI			// advance SI past them
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R15
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R14
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R13
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R12
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R11
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R10
-
-	COUNTS(Y0, AX)
-	ADDQ AX, R9
-
-	COUNT(Y0, AX)
-	ADDQ AX, R8
-
-	SUBQ $32, CX
-	JGE vec1			// repeat as long as bytes are left
-
-end1:	VZEROUPPER			// restore SSE-compatibility
-	SUBQ $-32, CX			// undo last subtraction
-	JLE end				// if CX<=0, there's nothing left
-
-scalar:	MOVBLZX (SI), AX		// load a byte from buf
-	INCQ SI				// advance past it
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R8			// add it to R8
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R9			// add it to R9
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R10			// add it to R10
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R11			// add it to R11
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R12			// add it to R12
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R13			// add it to R13
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R14			// add it to R14
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCQ $0, R15			// add it to R15
-
-	DECQ CX				// mark this byte as done
-	JNE scalar			// and proceed if any bytes are left
-
-	// write R8--R15 back to counts
-end:	MOVQ R8, 8*0(DI)
+	// write values back to count
+	MOVQ R8, 8*0(DI)
 	MOVQ R9, 8*1(DI)
 	MOVQ R10, 8*2(DI)
 	MOVQ R11, 8*3(DI)
@@ -201,4 +137,34 @@ end:	MOVQ R8, 8*0(DI)
 	MOVQ R14, 8*6(DI)
 	MOVQ R15, 8*7(DI)
 
+end15:	SUBQ $1-15*32, CX		// undo last subtraction and
+					// pre-subtract 1 byte from CX
+	JL end1
+
+	VPXOR X0, X0, X0		// X0: 8 word sized counters
+	VPBROADCASTQ magic<>+0(SB), X2	// X2: mask of bits positions
+
+	// scalar tail
+scalar:	VPBROADCASTB (SI), X1		// load a byte from the buffer
+	INCQ SI				// advance buffer past the loaded bytes
+	VPAND X2, X1, X1		// mask out the desired bytes
+	VPCMPEQB X2, X1, X1		// set byte to -1 if corresponding bit set
+	VPMOVSXBW X1, Y1		// sign extend to words
+	VPSUBW X1, X0, X0		// and subtract from the counters
+
+	SUBQ $1, CX			// decrement counter and loop
+	JGE scalar
+
+	// add to counters
+	VPMOVZXWQ X0, Y1
+	VPSRLDQ $8, X0, X0
+	VPADDQ 0*32(DI), Y1, Y1
+	VPMOVZXWQ X0, Y0
+	VPADDQ 1*32(DI), Y0, Y0
+
+	// write counters back
+	VMOVDQU Y1, 0*32(DI)
+	VMOVDQU Y0, 1*32(DI)
+
+end1:	VZEROUPPER
 	RET
