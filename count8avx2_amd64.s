@@ -47,9 +47,13 @@
 	LEAL (BX)(AX*4), AX \
 	ADDQ AX, R
 
-// magic counting constant
-DATA magic<>(SB)/8, $0x8040201008040201
-GLOBL magic<>(SB), RODATA|NOPTR, $8
+// magic constants
+DATA magic<>+ 0(SB)/8, $0x0000000000000000
+DATA magic<>+ 8(SB)/8, $0x0101010101010101
+DATA magic<>+16(SB)/8, $0x0202020202020202
+DATA magic<>+24(SB)/8, $0x0303030303030303
+DATA magic<>+32(SB)/8, $0x8040201008040201
+GLOBL magic<>(SB), RODATA|NOPTR, $40
 
 // func count8avx2(counts *[8]int, buf []byte)
 TEXT ·count8avx2(SB),NOSPLIT,$0-32
@@ -137,34 +141,80 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf into Y0--Y14
 	MOVQ R14, 8*6(DI)
 	MOVQ R15, 8*7(DI)
 
-end15:	SUBQ $1-15*32, CX		// undo last subtraction and
-					// pre-subtract 1 byte from CX
-	JL end1
+end15:	VPXOR X0, X0, X0		// Y0: 32 byte sized counters
+	VPBROADCASTQ magic<>+32(SB), Y2	// Y2: mask of bits positions
 
-	VPXOR X0, X0, X0		// X0: 8 word sized counters
-	VPBROADCASTQ magic<>+0(SB), X2	// X2: mask of bits positions
+	SUBQ $4-15*32, CX		// undo last subtraction and
+	JL end4				// pre-subtract 4 bytes from CX
+
+	VMOVDQU magic<>+0(SB), Y3	// Y3: shuffle mask
+
+	// 4 bytes at a time
+vec4:	VPBROADCASTD (SI), Y1		// load 4 bytes from the buffer
+	ADDQ $4, SI			// advance past loaded bytes
+	VPSHUFB Y3, Y1, Y1		// shuffle bytes into the right places
+	VPAND Y2, Y1, Y1		// mask out the desired bits
+	VPCMPEQB Y2, Y1, Y1		// set byte to -1 if corresponding bit set
+	VPSUBB Y1, Y0, Y0		// and subtract from the counters
+
+	SUBQ $4, CX			// decrement counter and loop
+	JGE vec4
+
+end4:	SUBQ $1-4, CX			// undo last-subtraction and
+	JL end1				// pre-subtract 4 bytes from CX
+
+	VPXOR X3, X3, X3		// X2: counters for the scalar tail
 
 	// scalar tail
 scalar:	VPBROADCASTB (SI), X1		// load a byte from the buffer
 	INCQ SI				// advance buffer past the loaded bytes
-	VPAND X2, X1, X1		// mask out the desired bytes
+	VPAND X2, X1, X1		// mask out the desired bits
 	VPCMPEQB X2, X1, X1		// set byte to -1 if corresponding bit set
-	VPMOVSXBW X1, Y1		// sign extend to words
-	VPSUBW X1, X0, X0		// and subtract from the counters
-
+	VPSUBB X1, X3, X3		// and subtract from the counters
 	SUBQ $1, CX			// decrement counter and loop
 	JGE scalar
 
+	VPSRLDQ $8, X3, X3		// discard low copy of counters
+	VPADDB Y3, Y0, Y0		// and add them to the others
+
 	// add to counters
-	VPMOVZXWQ X0, Y1
-	VPSRLDQ $8, X0, X0
+end1:	VEXTRACTI128 $1, Y0, X1		// extract high counter pair
+	VPADDB X1, X0, X0		// and fold over low pair
+
+	VPMOVZXBQ X0, Y1		// extra individual counters
+	VPSRLDQ $4, X0, X0
 	VPADDQ 0*32(DI), Y1, Y1
-	VPMOVZXWQ X0, Y0
-	VPADDQ 1*32(DI), Y0, Y0
+
+	VPMOVZXBQ X0, Y2
+	VPSRLDQ $4, X0, X0
+	VPADDQ 1*32(DI), Y2, Y2
+
+	VPMOVZXBQ X0, Y3
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y3, Y1, Y1
+
+	VPMOVZXBQ X0, Y3
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y3, Y2, Y2
+
+	VPMOVZXBQ X0, Y3
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y3, Y1, Y1
+
+	VPMOVZXBQ X0, Y3
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y3, Y2, Y2
+
+	VPMOVZXBQ X0, Y3
+	VPSRLDQ $4, X0, X0
+	VPADDQ Y3, Y1, Y1
+
+	VPMOVZXBQ X0, Y3
+	VPADDQ Y3, Y2, Y2
 
 	// write counters back
 	VMOVDQU Y1, 0*32(DI)
-	VMOVDQU Y0, 1*32(DI)
+	VMOVDQU Y2, 1*32(DI)
 
-end1:	VZEROUPPER
+	VZEROUPPER
 	RET
