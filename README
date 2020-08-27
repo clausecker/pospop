@@ -1,3 +1,30 @@
-This is going to be a production version of my other repository
-github.com/fuzxxl/pospopcnt.  Currently work in progress and
-subject to change.
+High-performance vectorised positional popcount routines for Go
+===============================================================
+
+This repository contains implementations of the positional population
+count functions for Go.  Details on the algorithms used will be
+published in a future research paper.
+
+The kernels works on a block size of 240 or 480 bytes (depending on
+whether AVX2 is available or not).  A buffer size that is a multiple
+of 480 bytes and at least 10 kB in size is recommended.
+
+Performance with a 100 kB buffer on an Intel(R) Xeon(R) W-2133 CPU
+@ 3.60 GHz:
+
+	amd64/avx2	amd64/sse2	386/avx2	386/sse2
+Count8	30.0 GB/s	14.3 GB/s	27.2 GB/s	14.6 GB/s
+Count16	27.1 GB/s	13.0 GB/s	28.3 GB/s	14.6 GB/s
+
+Work left to do:
+
+ * provide assembly kernels for Count32 and Count64
+ * port the arm64 kernel(s) to Go-style asm, pending improvements to
+   the Go assembler; Go 1.16 will be required to use these kernels.
+ * provide assembly kernels for arm, ppcle, and others
+   (hardware donations appreciated for targets other than those listed)
+ * provide variants of Count16, Count32, and Count64 working on byte
+   arrays
+
+(c) 2020 Robert Clausecker <fuz@fuz.su>.  All rights reserved.
+An open source license will be decided on in a future release.

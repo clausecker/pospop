@@ -1,4 +1,19 @@
-// Positional population count.
+// Copyright ©2020 Robert Clausecker <fuz@fuz.su>.  All rights reserved.
+
+// Positional population counts.
+//
+// The kernels works on a block size of 240 or 480 bytes (depending on
+// whether AVX2 is available or not).  A buffer size that is a multiple
+// of 480 bytes and at least 10 kB in size is recommended.
+//
+// Right now, kernels exist for Count8 and Count16 on both 386 and amd64
+// with SSE2 or AVX2.  An appropriate implementation is chosen at
+// runtime.  If no kernel is present, a portable (but slow) fallback
+// implementation will be used.
+//
+// Further kernels and architectures may be implemented in future
+// versions of this library.  The interface is expected to remain stable.
+
 package pospop
 
 // each platform must provide arrays count8funcs, coun16funcs,
