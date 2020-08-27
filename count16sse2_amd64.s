@@ -94,7 +94,7 @@ vec15:	MOVOU 0*16(SI), X0		// load 480 bytes from buf
 	CSA(X2, X3, X4, X7)
 
 	ADDQ $15*16, SI
-#define D	75
+#define D	90
 	PREFETCHT0 (D+ 0)*16(SI)
 	PREFETCHT0 (D+ 4)*16(SI)
 	PREFETCHT0 (D+ 8)*16(SI)
