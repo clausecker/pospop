@@ -3,7 +3,7 @@
 // 16 bit positional population count using AVX-2.
 // Processes 480 bytes at a time using a 15-fold
 // carry-save-adder reduction.
-// Required feature flags: POPCNT, AVX2
+// Required feature flags: AVX2
 
 // B:A = A+B+C, D used for scratch space
 #define CSA(A, B, C, D) \
