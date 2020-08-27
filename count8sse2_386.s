@@ -1,9 +1,9 @@
 #include "textflag.h"
 
-// 8 bit positional population count using just SSE2.
+// 8 bit positional population count using SSE2.
 // Processes 240 bytes at a time using a 15-fold
 // carry-save-adder reduction.
-// Required feature flags: SSE2 (default).
+// Required feature flags: SSE2.
 
 // B:A = A+B+C, D used for scratch space
 #define CSA(A, B, C, D) \
@@ -13,76 +13,35 @@
 	MOVOA A, B \
 	PAND C, B \
 	PXOR C, A \
-	POR  D, B
+	POR D, B
 
-// count the number of MSB set in X4:X3:X1:X0
-// and accumulate into R
-// uses a modified (!) "parallel popcount" algorithm.
-// The MSBs of X3, X2, X1, and X0 are concatenated into AX.
-// Then, the population count is taken using a modified
-// "parallel popcount" algorithm.  The modification pertains
-// the final step which has been changed such that the place
-// value of X0, X1, X2, and X3 are accounted for.
-#define ACCUMHALF(A, B, X, Y) \
-	PMOVMSKB Y, A \
-	SHLL $16, A \
-	PMOVMSKB X, B \
-	ORL B, A \
-	MOVL A, B \
-	SHRL $1, B \
-	ANDL $0x55555555, B \
-	SUBL B, A \
-	MOVL A, B \
-	ANDL $0x33333333, A \
-	SHRL $2, B \
-	ANDL $0x33333333, B \
-	ADDL B, A \
-	MOVL A, B \
-	SHRL $4, B \
-	ADDL B, A \
-	ANDL $0x0f0f0f0f, A \
-	IMULL $0x01010202, A \
-	SHRL $24, A \
+// magic transposition constants, comparison constants
+DATA magic<>+ 0(SB)/8, $0x0f0f0f0f0f0f0f0f
+DATA magic<>+ 8(SB)/8, $0x00aa00aa00aa00aa
+DATA magic<>+16(SB)/8, $0x0000cccc0000cccc
+DATA magic<>+24(SB)/8, $0x8040201008040201
+GLOBL magic<>(SB), RODATA|NOPTR, $32
 
-#define ACCUM(R) \
-	ACCUMHALF(BX, DX, X2, X3) \
-	ACCUMHALF(AX, DX, X0, X1) \
-	LEAL (AX)(BX*4), AX \
-	ADDL AX, R
+// pseudo-transpose the 4x8 bit matrices in Y.  Transforms
+// Y = D7D6D5D4 D3D2D1D0 C7C6C5C4 C3C2C1C0 B7B6B5B4 B3B2B1B0 A7A6A5A4 A3A2A1A0
+// to  D7C7B7A7 D3C3B3A3 D6C6B6A6 D2C2B2A2 D5C5B5A5 D1C1B1A1 D4C4B4A4 D0C0B0A0
+// requires magic constants 0x00aa00aa in X6 and 0x0000cccc in X7
+#define TRANSPOSE(Y) \
+	BITPERMUTE(Y, X6, $7) \
+	BITPERMUTE(Y, X7, $14)
 
-// same as ACCUM, but left-shift X0, X1, X2, and X3
-#define ACCUMS(R) \
-	ACCUMHALF(BX, DX, X2, X3) \
-	PADDB X3, X3 \
-	PADDB X2, X2 \
-	ACCUMHALF(AX, DX, X0, X1) \
-	PADDB X1, X1 \
-	PADDB X0, X0 \
-	LEAL (AX)(BX*4), AX \
-	ADDL AX, R
+// swap the bits of Y selected by mask M with those S bits to the left.
+// uses X4 as a temporary register
+#define BITPERMUTE(Y, M, S) \
+	MOVOA Y, X4 \
+	PSRLL S, X4 \
+	PXOR Y, X4 \
+	PAND M, X4 \
+	PXOR X4, Y \
+	PSLLL S, X4 \
+	PXOR X4, Y
 
-// perform a population count of four words packed into AX
-// the result has population counts in every other byte and
-// garbage inbetween.
-#define PACKPOPCNT \
-	MOVL AX, DX \
-	SHRL $1, DX \
-	ANDL $0x55555555, DX \
-	SUBL DX, AX \
-	MOVL AX, DX \
-	ANDL $0x33333333, AX \
-	SHRL $2, DX \
-	ANDL $0x33333333, DX \
-	ADDL DX, AX \
-	MOVL AX, DX \
-	SHRL $4, DX \
-	ADDL DX, AX \
-	ANDL $0x0f0f0f0f, AX \
-	MOVL AX, DX \
-	SHRL $8, DX \
-	ADDL DX, AX
-
-// func count8sse2(counts *[8]int, buf []byte)
+// func count8sse2(counts *[8]int, buf []uint8)
 TEXT ·count8sse2(SB),NOSPLIT,$0-16
 	MOVL counts+0(FP), DI
 	MOVL buf_base+4(FP), SI		// SI = &buf[0]
@@ -92,156 +51,166 @@ TEXT ·count8sse2(SB),NOSPLIT,$0-16
 	JL end15
 
 vec15:	MOVOU 0*16(SI), X0		// load 240 bytes from buf
-	MOVOU 1*16(SI), X1		// and sum them into X3:X2:X1:X0
-	MOVOU 2*16(SI), X2
-	CSA(X0, X1, X2, X7)
-
+	MOVOU 1*16(SI), X1		// and sum them into Y3:Y2:Y1:Y0
+	MOVOU 2*16(SI), X4
 	MOVOU 3*16(SI), X2
 	MOVOU 4*16(SI), X3
-	MOVOU 5*16(SI), X4
-	CSA(X2, X3, X4, X7)
-
-	MOVOU 6*16(SI), X4
-	CSA(X0, X2, X4, X7)
-
+	MOVOU 5*16(SI), X5
+	MOVOU 6*16(SI), X6
+	CSA(X0, X1, X4, X7)
 	MOVOU 7*16(SI), X4
+	CSA(X3, X2, X5, X7)
 	MOVOU 8*16(SI), X5
-	CSA(X0, X4, X5, X7)
+	CSA(X0, X3, X6, X7)
+	MOVOU 9*16(SI), X6
 	CSA(X1, X2, X3, X7)
-
-	MOVOU 9*16(SI), X3
-	MOVOU 10*16(SI), X5
-	CSA(X0, X3, X5, X7)
-	CSA(X1, X3, X4, X7)
-
-	MOVOU 11*16(SI), X4
-	MOVOU 12*16(SI), X5
+	MOVOU 10*16(SI), X3
 	CSA(X0, X4, X5, X7)
-
-	MOVOU 13*16(SI), X5
-	MOVOU 14*16(SI), X6
+	MOVOU 11*16(SI), X5
+	CSA(X0, X3, X6, X7)
+	MOVOU 12*16(SI), X6
+	CSA(X1, X3, X4, X7)
+	MOVOU 13*16(SI), X4
 	CSA(X0, X5, X6, X7)
+	MOVOU 14*16(SI), X6
+	CSA(X0, X4, X6, X7)
 	CSA(X1, X4, X5, X7)
 	CSA(X2, X3, X4, X7)
 
 	ADDL $15*16, SI
-#define D	75
+#define D	90
 	PREFETCHT0 (D+ 0)*16(SI)
 	PREFETCHT0 (D+ 4)*16(SI)
 	PREFETCHT0 (D+ 8)*16(SI)
 	PREFETCHT0 (D+12)*16(SI)
 
-	// X4:X3:X1:X0 = X0+X1+...+X14
+	// load magic constants
+	MOVQ magic<>+ 0(SB), X5		// low nibbles
+	MOVQ magic<>+ 8(SB), X6		// for TRANSPOSE
+	MOVQ magic<>+16(SB), X7		// for TRANSPOSE
 
-	ACCUMS(7*4(DI))
-	ACCUMS(6*4(DI))
-	ACCUMS(5*4(DI))
-	ACCUMS(4*4(DI))
-	ACCUMS(3*4(DI))
-	ACCUMS(2*4(DI))
-	ACCUMS(1*4(DI))
-	ACCUM(0*4(DI))
+	// broadcast constants to 128 bit
+	PUNPCKLLQ X5, X5
+	PUNPCKLLQ X6, X6
+	PUNPCKLLQ X7, X7
+
+	// shuffle registers such that X3:X2:X1:X0 contains dwords
+	// of the form 0xDDCCBBAA
+	MOVOU X2, X4
+	PUNPCKLBW X3, X2		// X2 = DDCCDDCC (lo)
+	PUNPCKHBW X3, X4		// X5 = DDCCDDCC (hi)
+	MOVOU X0, X3
+	PUNPCKLBW X1, X0		// X0 = BBAABBAA (lo)
+	PUNPCKHBW X1, X3		// X3 = BBAABBAA (hi)
+	MOVOU X0, X1
+	PUNPCKLWL X2, X0		// X0 = DDCCBBAA (0)
+	PUNPCKHWL X2, X1		// X1 = DDCCBBAA (1)
+	MOVOU X3, X2
+	PUNPCKLWL X4, X2		// X2 = DDCCBBAA (2)
+	PUNPCKHWL X4, X3		// X3 = DDCCBBAA (3)
+
+	// pseudo-transpose the 8x4 bit matrix in each dword
+	TRANSPOSE(X0)
+	TRANSPOSE(X1)
+	TRANSPOSE(X2)
+	TRANSPOSE(X3)
+
+	// pull out low nibbles from matrices
+	MOVOA X0, X4
+	PAND X5, X4
+	PSRLL $4, X0
+
+	MOVOU X1, X6
+	PAND X5, X6
+	PSRLL $4, X1
+	PADDB X6, X4
+
+	MOVOU X2, X6
+	PAND X5, X6
+	PSRLL $4, X2
+
+	MOVOU X3, X7
+	PAND X5, X7
+	PSRLL $4, X3
+
+	PADDB X7, X6
+	PADDB X6, X4		// X4 = ba98:3210:ba98:3210
+
+	// load counters
+	MOVOU 0*4(DI), X6
+	MOVOU 4*4(DI), X7
+
+	// pull out high nibbles from matrices
+	PAND X5, X0
+	PAND X5, X1
+	PADDB X0, X1
+	PAND X5, X2
+	PAND X5, X3
+	PADDB X2, X3
+	PADDB X3, X1		// X1 = fedc:7654:fedc:7654
+
+	// merge counters and sum
+	MOVOA X4, X0
+	PUNPCKLLQ X1, X0
+	PUNPCKHLQ X1, X4
+	PADDB X4, X0		// X0 = fedc:ba98:7654:3210
+
+	// sum fedc:ba98 and 7654:3210 and zero extend to words
+	PXOR X4, X4		// zero register
+	MOVOA X0, X1
+	PUNPCKLBW X4, X0
+	PUNPCKHBW X4, X1
+	PADDW X1, X0		// X0 = 76:54:32:10
+
+	// zero extend half word -> dword and add to counters
+	MOVOA X0, X2
+	PUNPCKLWL X4, X0
+	PUNPCKHWL X4, X2
+	PADDL X0, X6
+	PADDL X2, X7
+
+	// write counters back
+	MOVOU X6, 0*4(DI)
+	MOVOU X7, 4*4(DI)
 
 	SUBL $15*16, CX
 	JGE vec15			// repeat as long as bytes are left
 
-end15:	SUBL $-14*16, CX		// undo last subtraction and
-					// pre-subtract 16 bit from CX
-	JL end1
+end15:	SUBL $1-15*16, CX		// undo last subtraction and
+	JL end1				// pre-subtract 2 byte from CX
 
-vec1:	MOVOU (SI), X0			// load 16 bytes from buf
-	ADDL $16, SI			// advance SI past them
+	// scalar tail: process one byte at a time
+	PXOR X0, X0			// X1: 8 byte sized counters
+	MOVQ magic<>+24(SB), X2		// X2: mask of bits positions
 
-	PMOVMSKB X0, AX
-	PADDB X0, X0
-	SHLL $16, AX
-	PMOVMSKB X0, DX
-	PADDB X0, X0
-	ORL DX, AX
-	PACKPOPCNT
-	MOVBLZX AL, DX
-	ADDL DX, 6*4(DI)
-	SHRL $16, AX
-	MOVBLZX AL, DX
-	ADDL DX, 7*4(DI)
+	MOVOU 0*4(DI), X6		// counters 0--3
+	MOVOU 4*4(DI), X7		// counter  4--7
 
-	PMOVMSKB X0, AX
-	PADDB X0, X0
-	SHLL $16, AX
-	PMOVMSKB X0, DX
-	PADDB X0, X0
-	ORL DX, AX
-	PACKPOPCNT
-	MOVBLZX AL, DX
-	ADDL DX, 4*4(DI)
-	SHRL $16, AX
-	MOVBLZX AL, DX
-	ADDL DX, 5*4(DI)
+scalar:	MOVBLZX (SI), AX		// load one byte from the buffer
+	INCL SI				// advance buffer past the loaded bytes
+	MOVL AX, X1			// into an SSE register
+	PUNPCKLBW X1, X1		// double byte into words
+	PSHUFLW $0x00, X1, X1		// broadcast word into qword
+	PAND X2, X1			// mask out the desired bytes
+	PCMPEQB X2, X1			// set byte to -1 if corresponding bit set
+	PSUBB X1, X0			// and subtract from the counters
 
-	PMOVMSKB X0, AX
-	PADDB X0, X0
-	SHLL $16, AX
-	PMOVMSKB X0, DX
-	PADDB X0, X0
-	ORL DX, AX
-	PACKPOPCNT
-	MOVBLZX AL, DX
-	ADDL DX, 2*4(DI)
-	SHRL $16, AX
-	MOVBLZX AL, DX
-	ADDL DX, 3*4(DI)
+	SUBL $1, CX			// decrement counter and loop
+	JGE scalar
 
-	PMOVMSKB X0, AX
-	PADDB X0, X0
-	SHLL $16, AX
-	PMOVMSKB X0, DX
-	ORL DX, AX
-	PACKPOPCNT
-	MOVBLZX AL, DX
-	ADDL DX, 0*4(DI)
-	SHRL $16, AX
-	MOVBLZX AL, DX
-	ADDL DX, 1*4(DI)
+	// zero extend to words
+	PXOR X4, X4			// zero register
+	PUNPCKLBW X4, X0
 
-	SUBL $16, CX
-	JGE vec1			// repeat as long as bytes are left
+	// zero extend word -> dword and add to counters
+	MOVOA X0, X2
+	PUNPCKLWL X4, X0
+	PUNPCKHWL X4, X2
+	PADDL X0, X6
+	PADDL X2, X7
 
-end1:	SUBL $-16, CX			// undo last subtraction
-	JLE ret				// if CX=0, there's nothing left
+	// write counters back
+	MOVOU X6, 0*4(DI)
+	MOVOU X7, 4*4(DI)
 
-	MOVL 0*4(DI), BX		// keep some counters in register
-	MOVL 4*4(DI), DX
-
-scalar:	MOVBLZX (SI), AX		// load a byte from buf
-	INCL SI				// advance past it
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, BX			// add it to counts[0]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 1*4(DI)		// add it to counts[1]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 2*4(DI)		// add it to counts[2]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 3*4(DI)		// add it to counts[3]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, DX			// add it to counts[4]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 5*4(DI)		// add it to counts[5]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 6*4(DI)		// add it to counts[6]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 7*4(DI)		// add it to counts[7]
-
-	DECL CX				// mark this byte as done
-	JNE scalar			// and proceed if any bytes are left
-
-end:	MOVL BX, 0*4(DI)		// restore counters
-	MOVL DX, 4*4(DI)
-ret:	RET
+end1:	RET

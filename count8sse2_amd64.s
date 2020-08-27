@@ -161,7 +161,7 @@ vec15:	MOVOU 0*16(SI), X0		// load 240 bytes from buf
 	MOVOA X0, X1
 	PUNPCKLBW X4, X0
 	PUNPCKHBW X4, X1
-	PADDB X1, X0		// X0 = 76:54:32:10
+	PADDW X1, X0		// X0 = 76:54:32:10
 
         // add to counters
 
