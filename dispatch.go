@@ -101,8 +101,8 @@ func Count8(counts *[8]int, buf []uint8) {
 
 // Count the number of corresponding set bits of the values in buf and
 // add the results to counts.  Each element of counts keeps track of a
-// different place; counts[0] for 0x001, counts[1] for 0x0002, and so on
-// to counts[15] for 0x8000.
+// different place; counts[0] for 0x0001, counts[1] for 0x0002, and so
+// on to counts[15] for 0x8000.
 func Count16(counts *[16]int, buf []uint16) {
 	count16funcs[count16id].count16(counts, buf)
 }
@@ -118,7 +118,7 @@ func Count32(counts *[32]int, buf []uint32) {
 // Count the number of corresponding set bits of the values in buf and
 // add the results to counts.  Each element of counts keeps track of a
 // different place; counts[0] for 0x000000000000001, counts[1] for
-// 0x0000000000000002, and so on to counts[31] for 0x8000000000000000.
+// 0x0000000000000002, and so on to counts[63] for 0x8000000000000000.
 func Count64(counts *[64]int, buf []uint64) {
 	count64funcs[count64id].count64(counts, buf)
 }
