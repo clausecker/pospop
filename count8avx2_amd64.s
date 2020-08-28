@@ -180,43 +180,23 @@ scalar:	VPBROADCASTB (SI), X1		// load a byte from the buffer
 	VPADDB Y3, Y0, Y0		// and add them to the others
 
 	// add to counters
-end1:	VEXTRACTI128 $1, Y0, X1		// extract high counter pair
+end1:	VMOVDQU 0*8(DI), Y2		// load low  counters
+	VMOVDQU 4*8(DI), Y3		// load high counters
+
+	VEXTRACTI128 $1, Y0, X1		// extract high counter pair
 	VPADDB X1, X0, X0		// and fold over low pair
 
-	VPMOVZXBQ X0, Y1		// extra individual counters
-	VPSRLDQ $4, X0, X0
-	VPADDQ 0*32(DI), Y1, Y1
+	VPMOVZXBW X0, Y0		// zero extend to words
+	VEXTRACTI128 $1, Y0, X1		// extra high counters
+	VPADDW X1, X0, X0		// and fold over low counters
 
-	VPMOVZXBQ X0, Y2
-	VPSRLDQ $4, X0, X0
-	VPADDQ 1*32(DI), Y2, Y2
-
-	VPMOVZXBQ X0, Y3
-	VPSRLDQ $4, X0, X0
-	VPADDQ Y3, Y1, Y1
-
-	VPMOVZXBQ X0, Y3
-	VPSRLDQ $4, X0, X0
-	VPADDQ Y3, Y2, Y2
-
-	VPMOVZXBQ X0, Y3
-	VPSRLDQ $4, X0, X0
-	VPADDQ Y3, Y1, Y1
-
-	VPMOVZXBQ X0, Y3
-	VPSRLDQ $4, X0, X0
-	VPADDQ Y3, Y2, Y2
-
-	VPMOVZXBQ X0, Y3
-	VPSRLDQ $4, X0, X0
-	VPADDQ Y3, Y1, Y1
-
-	VPMOVZXBQ X0, Y3
-	VPADDQ Y3, Y2, Y2
-
-	// write counters back
-	VMOVDQU Y1, 0*32(DI)
-	VMOVDQU Y2, 1*32(DI)
+	VPSRLDQ $8, X0, X1		// extract high counter half
+	VPMOVZXWQ X0, Y0		// zero extend low counter half to qwords
+	VPADDQ Y0, Y2, Y0		// add to counters
+	VPMOVZXWQ X1, Y1		// zero extend high counter half to qwords
+	VPADDQ Y1, Y3, Y1		// add to counters
+	VMOVDQU Y0, 0*8(DI)		// and write back
+	VMOVDQU Y1, 4*8(DI)
 
 	VZEROUPPER
 	RET

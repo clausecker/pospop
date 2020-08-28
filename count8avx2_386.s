@@ -48,6 +48,14 @@
 	LEAL (BX)(AX*4), AX \
 	ADDL AX, R
 
+// magic constants
+DATA magic<>+ 0(SB)/8, $0x0000000000000000
+DATA magic<>+ 8(SB)/8, $0x0101010101010101
+DATA magic<>+16(SB)/8, $0x0202020202020202
+DATA magic<>+24(SB)/8, $0x0303030303030303
+DATA magic<>+32(SB)/8, $0x8040201008040201
+GLOBL magic<>(SB), RODATA|NOPTR, $40
+
 // func count8avx2(counts *[8]int, buf []byte)
 TEXT ·count8avx2(SB),NOSPLIT,$0-16
 	MOVL counts+0(FP), DI
@@ -115,77 +123,55 @@ vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	SUBL $15*32, CX
 	JGE vec15			// repeat as long as bytes are left
 
-end15:	SUBL $-14*32, CX		// undo last subtraction and
-					// pre-subtract 32 bit from CX
-	JL end1
+end15:	VPXOR X0, X0, X0		// Y0: 32 byte sized counters
+	VPBROADCASTQ magic<>+32(SB), Y2	// Y2: mask of bits positions
 
-vec1:	VMOVDQU (SI), Y0		// load 32 bytes from buf
-	ADDL $32, SI			// advance SI past them
+	SUBL $4-15*32, CX		// undo last subtraction and
+	JL end4				// pre-subtract 4 bytes from CX
 
-	COUNTS(Y0, AX)
-	ADDL AX, 7*4(DI)
+	VMOVDQU magic<>+0(SB), Y3	// Y3: shuffle mask
 
-	COUNTS(Y0, AX)
-	ADDL AX, 6*4(DI)
+	// 4 bytes at a time
+vec4:	VPBROADCASTD (SI), Y1		// load 4 bytes from the buffer
+	ADDL $4, SI			// advance past loaded bytes
+	VPSHUFB Y3, Y1, Y1		// shuffle bytes into the right places
+	VPAND Y2, Y1, Y1		// mask out the desired bits
+	VPCMPEQB Y2, Y1, Y1		// set byte to -1 if corresponding bit set
+	VPSUBB Y1, Y0, Y0		// and subtract from the counters
 
-	COUNTS(Y0, AX)
-	ADDL AX, 5*4(DI)
+	SUBL $4, CX			// decrement counter and loop
+	JGE vec4
 
-	COUNTS(Y0, AX)
-	ADDL AX, 4*4(DI)
+end4:	SUBL $1-4, CX			// undo last-subtraction and
+	JL end1				// pre-subtract 4 bytes from CX
 
-	COUNTS(Y0, AX)
-	ADDL AX, 3*4(DI)
+	VPXOR X3, X3, X3		// X2: counters for the scalar tail
 
-	COUNTS(Y0, AX)
-	ADDL AX, 2*4(DI)
+	// scalar tail
+scalar:	VPBROADCASTB (SI), X1		// load a byte from the buffer
+	INCL SI				// advance buffer past the loaded bytes
+	VPAND X2, X1, X1		// mask out the desired bits
+	VPCMPEQB X2, X1, X1		// set byte to -1 if corresponding bit set
+	VPSUBB X1, X3, X3		// and subtract from the counters
+	SUBL $1, CX			// decrement counter and loop
+	JGE scalar
 
-	COUNTS(Y0, AX)
-	ADDL AX, 1*4(DI)
+	VPSRLDQ $8, X3, X3		// discard low copy of counters
+	VPADDB Y3, Y0, Y0		// and add them to the others
 
-	COUNT(Y0, AX)
-	ADDL AX, 0*4(DI)
+	// add to counters
+end1:	VMOVDQU (DI), Y2		// load counters
+	VEXTRACTI128 $1, Y0, X1		// extract high counter pair
+	VPADDB X1, X0, X0		// and fold over low pair
 
-	SUBL $32, CX
-	JGE vec1			// repeat as long as bytes are left
+	VPMOVZXBW X0, Y0		// zero extend to words
+	VEXTRACTI128 $1, Y0, X1		// extra high counters
+	VPADDW X1, X0, X0		// and fold over low counters
 
-end1:	VZEROUPPER			// restore SSE-compatibility
-	SUBL $-32, CX			// undo last subtraction
-	JLE ret				// if CX<=0, there's nothing left
+	VPMOVZXWD X0, Y0		// zero extend to dwords
+	VPADDD Y0, Y2, Y0		// add to counters
+	VMOVDQU Y0, (DI)		// and write back
 
-	MOVL 0*4(DI), BX		// keep some counters in register
-	MOVL 4*4(DI), DX
+	VZEROUPPER
+	RET
 
-scalar:	MOVBLZX (SI), AX		// load a byte from buf
-	INCL SI				// advance past it
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, BX			// add it to counts[0]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 1*4(DI)		// add it to counts[1]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 2*4(DI)		// add it to counts[2]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 3*4(DI)		// add it to counts[3]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, DX			// add it to counts[4]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 5*4(DI)		// add it to counts[5]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 6*4(DI)		// add it to counts[6]
-
-	SHRL $1, AX			// is bit 0 set?
-	ADCL $0, 7*4(DI)		// add it to counts[7]
-
-	DECL CX				// mark this byte as done
-	JNE scalar			// and proceed if any bytes are left
-
-end:	MOVL BX, 0*4(DI)		// restore counters
-	MOVL DX, 4*4(DI)
-ret:	RET

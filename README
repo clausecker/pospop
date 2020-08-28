@@ -13,7 +13,7 @@ Performance with a 100 kB buffer on an Intel(R) Xeon(R) W-2133 CPU
 @ 3.60 GHz:
 
 	amd64/avx2	amd64/sse2	386/avx2	386/sse2
-Count8	30.0 GB/s	14.3 GB/s	27.2 GB/s	14.6 GB/s
+Count8	30.0 GB/s	14.3 GB/s	28.6 GB/s	14.6 GB/s
 Count16	27.1 GB/s	13.0 GB/s	28.3 GB/s	14.6 GB/s
 
 Work left to do:
