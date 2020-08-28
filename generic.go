@@ -3,29 +3,45 @@
 
 package pospop
 
+// Maximum data length for one iteration of an inner
+// counting function for the generic implementations.
+// Any larger and the 32 bit counters might overflow.
+const genericMaxLen = 1 << 16 - 1
+
 // count8 generic implementation
 func count8generic(counts *[8]int, buf []uint8) {
-	if uint64(len(buf)) >= 1<<(64-8) {
-		// Use fallback if we risk overflowing
-		count8safe(counts, buf)
-		return
-	}
-	var tmp [8]uint64
-	for _, v := range buf {
-		tmp[0] += uint64(v & 1)
-		tmp[1] += uint64(v & (1 << 1))
-		tmp[2] += uint64(v & (1 << 2))
-		tmp[3] += uint64(v & (1 << 3))
-		tmp[4] += uint64(v & (1 << 4))
-		tmp[5] += uint64(v & (1 << 5))
-		tmp[6] += uint64(v & (1 << 6))
-		tmp[7] += uint64(v & (1 << 7))
-	}
-	for i, v := range tmp[:] {
-		(*counts)[i] += int(v >> i)
+	for i := 0; i < len(buf); i += genericMaxLen {
+		n := genericMaxLen
+		if (n > len(buf) - i) {
+			n = len(buf) - i
+		}
+
+		roundCounts := count8genericRound(buf[i:i+n])
+
+		for j := range roundCounts {
+			counts[j] += int(roundCounts[j] >> (j & 0xf))
+		}
 	}
 }
 
+// A single count8 round, accumulating into 32 bit counters.
+func count8genericRound(buf []uint8) (counts [8]uint32) {
+	for i := range buf {
+		v := uint32(buf[i])
+		counts[0] += v & 1
+		counts[1] += v & (1 << 1)
+		counts[2] += v & (1 << 2)
+		counts[3] += v & (1 << 3)
+		counts[4] += v & (1 << 4)
+		counts[5] += v & (1 << 5)
+		counts[6] += v & (1 << 6)
+		counts[7] += v & (1 << 7)
+	}
+
+	return
+}
+
+// count8 reference implementation for tests.  Do not alter.
 func count8safe(counts *[8]int, buf []uint8) {
 	for i := 0; i < len(buf); i++ {
 		for j := 0; j < 8; j++ {
@@ -36,36 +52,47 @@ func count8safe(counts *[8]int, buf []uint8) {
 
 // count16 generic implementation
 func count16generic(counts *[16]int, buf []uint16) {
-	if uint64(len(buf)) >= 1<<(64-16) {
-		// Use fallback if we risk overflowing
-		count16safe(counts, buf)
-		return
-	}
-	var tmp [16]uint64
-	for _, v := range buf {
-		tmp[0] += uint64(v & 1)
-		tmp[1] += uint64(v & (1 << 1))
-		tmp[2] += uint64(v & (1 << 2))
-		tmp[3] += uint64(v & (1 << 3))
-		tmp[4] += uint64(v & (1 << 4))
-		tmp[5] += uint64(v & (1 << 5))
-		tmp[6] += uint64(v & (1 << 6))
-		tmp[7] += uint64(v & (1 << 7))
+	for i := 0; i < len(buf); i += genericMaxLen {
+		n := genericMaxLen
+		if (n > len(buf) - i) {
+			n = len(buf) - i
+		}
 
-		tmp[8] += uint64(v & (1 << 8))
-		tmp[9] += uint64(v & (1 << 9))
-		tmp[10] += uint64(v & (1 << 10))
-		tmp[11] += uint64(v & (1 << 11))
-		tmp[12] += uint64(v & (1 << 12))
-		tmp[13] += uint64(v & (1 << 13))
-		tmp[14] += uint64(v & (1 << 14))
-		tmp[15] += uint64(v & (1 << 15))
-	}
-	for i, v := range tmp[:] {
-		(*counts)[i] += int(v >> i)
+		roundCounts := count16genericRound(buf[i:i+n])
+
+		for j := range roundCounts {
+			counts[j] += int(roundCounts[j] >> (j & 0xf))
+		}
 	}
 }
 
+// A single count16 round, accumulating into 32 bit counters.
+func count16genericRound(buf []uint16) (counts [16]uint32) {
+	for i := range buf {
+		v := uint32(buf[i])
+		counts[0] += v & 1
+		counts[1] += v & (1 << 1)
+		counts[2] += v & (1 << 2)
+		counts[3] += v & (1 << 3)
+		counts[4] += v & (1 << 4)
+		counts[5] += v & (1 << 5)
+		counts[6] += v & (1 << 6)
+		counts[7] += v & (1 << 7)
+
+		counts[8] += v & (1 << 8)
+		counts[9] += v & (1 << 9)
+		counts[10] += v & (1 << 10)
+		counts[11] += v & (1 << 11)
+		counts[12] += v & (1 << 12)
+		counts[13] += v & (1 << 13)
+		counts[14] += v & (1 << 14)
+		counts[15] += v & (1 << 15)
+	}
+
+	return
+}
+
+// count16 reference implementation for tests.  Do not alter.
 func count16safe(counts *[16]int, buf []uint16) {
 	for i := 0; i < len(buf); i++ {
 		for j := 0; j < 16; j++ {
@@ -74,58 +101,70 @@ func count16safe(counts *[16]int, buf []uint16) {
 	}
 }
 
+// count32 generic implementation
 func count32generic(counts *[32]int, buf []uint32) {
-	if uint64(len(buf)) >= 1<<(64-16) {
-		// Use fallback if we risk overflowing
-		count32safe(counts, buf)
-		return
-	}
-	var tmp [32]uint64
-	for _, v := range buf {
-		tmp[0] += uint64(v & 1)
-		tmp[1] += uint64(v & (1 << 1))
-		tmp[2] += uint64(v & (1 << 2))
-		tmp[3] += uint64(v & (1 << 3))
-		tmp[4] += uint64(v & (1 << 4))
-		tmp[5] += uint64(v & (1 << 5))
-		tmp[6] += uint64(v & (1 << 6))
-		tmp[7] += uint64(v & (1 << 7))
+	for i := 0; i < len(buf); i += genericMaxLen {
+		n := genericMaxLen
+		if (n > len(buf) - i) {
+			n = len(buf) - i
+		}
 
-		tmp[8] += uint64(v & (1 << 8))
-		tmp[9] += uint64(v & (1 << 9))
-		tmp[10] += uint64(v & (1 << 10))
-		tmp[11] += uint64(v & (1 << 11))
-		tmp[12] += uint64(v & (1 << 12))
-		tmp[13] += uint64(v & (1 << 13))
-		tmp[14] += uint64(v & (1 << 14))
-		tmp[15] += uint64(v & (1 << 15))
+		roundCounts := count32genericRound(buf[i:i+n])
 
-		v >>= 16
-		const off = 16
-		tmp[0+off] += uint64(v & 1)
-		tmp[1+off] += uint64(v & (1 << 1))
-		tmp[2+off] += uint64(v & (1 << 2))
-		tmp[3+off] += uint64(v & (1 << 3))
-		tmp[4+off] += uint64(v & (1 << 4))
-		tmp[5+off] += uint64(v & (1 << 5))
-		tmp[6+off] += uint64(v & (1 << 6))
-		tmp[7+off] += uint64(v & (1 << 7))
-
-		tmp[8+off] += uint64(v & (1 << 8))
-		tmp[9+off] += uint64(v & (1 << 9))
-		tmp[10+off] += uint64(v & (1 << 10))
-		tmp[11+off] += uint64(v & (1 << 11))
-		tmp[12+off] += uint64(v & (1 << 12))
-		tmp[13+off] += uint64(v & (1 << 13))
-		tmp[14+off] += uint64(v & (1 << 14))
-		tmp[15+off] += uint64(v & (1 << 15))
-	}
-	for i, v := range tmp[:] {
-		(*counts)[i] += int(v >> (i & 15))
+		for j := range roundCounts {
+			counts[j] += int(roundCounts[j] >> (j & 0xf))
+		}
 	}
 }
 
-// count32 generic implementation
+
+// A single count32 round, accumulating into 32 bit counters.
+func count32genericRound(buf []uint32) (counts [32]uint32) {
+	for i := range buf {
+		v := uint32(buf[i])
+		counts[0] += v & 1
+		counts[1] += v & (1 << 1)
+		counts[2] += v & (1 << 2)
+		counts[3] += v & (1 << 3)
+		counts[4] += v & (1 << 4)
+		counts[5] += v & (1 << 5)
+		counts[6] += v & (1 << 6)
+		counts[7] += v & (1 << 7)
+
+		counts[8] += v & (1 << 8)
+		counts[9] += v & (1 << 9)
+		counts[10] += v & (1 << 10)
+		counts[11] += v & (1 << 11)
+		counts[12] += v & (1 << 12)
+		counts[13] += v & (1 << 13)
+		counts[14] += v & (1 << 14)
+		counts[15] += v & (1 << 15)
+
+		v >>= 16
+		const off = 16
+		counts[0+off] += v & 1
+		counts[1+off] += v & (1 << 1)
+		counts[2+off] += v & (1 << 2)
+		counts[3+off] += v & (1 << 3)
+		counts[4+off] += v & (1 << 4)
+		counts[5+off] += v & (1 << 5)
+		counts[6+off] += v & (1 << 6)
+		counts[7+off] += v & (1 << 7)
+
+		counts[8+off] += v & (1 << 8)
+		counts[9+off] += v & (1 << 9)
+		counts[10+off] += v & (1 << 10)
+		counts[11+off] += v & (1 << 11)
+		counts[12+off] += v & (1 << 12)
+		counts[13+off] += v & (1 << 13)
+		counts[14+off] += v & (1 << 14)
+		counts[15+off] += v & (1 << 15)
+	}
+
+	return
+}
+
+// count32 reference implementation for tests.  Do not alter.
 func count32safe(counts *[32]int, buf []uint32) {
 	for i := 0; i < len(buf); i++ {
 		for j := 0; j < 32; j++ {
@@ -134,44 +173,109 @@ func count32safe(counts *[32]int, buf []uint32) {
 	}
 }
 
+// count64 generic implementation
 func count64generic(counts *[64]int, buf []uint64) {
-	if uint64(len(buf)) >= 1<<(64-16) {
-		// Use fallback if we risk overflowing
-		count64safe(counts, buf)
-		return
-	}
-	var tmpAll [4][16]uint64
-	for _, v := range buf {
-		for i := 0; i < 4; i++ {
-			tmp := tmpAll[i][:]
-			tmp[0] += v & 1
-			tmp[1] += v & (1 << 1)
-			tmp[2] += v & (1 << 2)
-			tmp[3] += v & (1 << 3)
-			tmp[4] += v & (1 << 4)
-			tmp[5] += v & (1 << 5)
-			tmp[6] += v & (1 << 6)
-			tmp[7] += v & (1 << 7)
-
-			tmp[8] += v & (1 << 8)
-			tmp[9] += v & (1 << 9)
-			tmp[10] += v & (1 << 10)
-			tmp[11] += v & (1 << 11)
-			tmp[12] += v & (1 << 12)
-			tmp[13] += v & (1 << 13)
-			tmp[14] += v & (1 << 14)
-			tmp[15] += v & (1 << 15)
-			v >>= 16
+	for i := 0; i < len(buf); i += genericMaxLen {
+		n := genericMaxLen
+		if (n > len(buf) - i) {
+			n = len(buf) - i
 		}
-	}
-	for i, tmp := range tmpAll[:] {
-		for j, v := range tmp[:] {
-			(*counts)[i*16+j] += int(v >> j)
+
+		roundCounts := count64genericRound(buf[i:i+n])
+
+		for j := range roundCounts {
+			counts[j] += int(roundCounts[j] >> (j & 0xf))
 		}
 	}
 }
 
-// count64 generic implementation
+// A single count64 round, accumulating into 32 bit counters.
+func count64genericRound(buf []uint64) (counts [64]uint32) {
+	for i := range buf {
+		v := uint32(buf[i])
+		counts[0] += v & 1
+		counts[1] += v & (1 << 1)
+		counts[2] += v & (1 << 2)
+		counts[3] += v & (1 << 3)
+		counts[4] += v & (1 << 4)
+		counts[5] += v & (1 << 5)
+		counts[6] += v & (1 << 6)
+		counts[7] += v & (1 << 7)
+
+		counts[8] += v & (1 << 8)
+		counts[9] += v & (1 << 9)
+		counts[10] += v & (1 << 10)
+		counts[11] += v & (1 << 11)
+		counts[12] += v & (1 << 12)
+		counts[13] += v & (1 << 13)
+		counts[14] += v & (1 << 14)
+		counts[15] += v & (1 << 15)
+
+		v >>= 16
+		off := 16
+		counts[0+off] += v & 1
+		counts[1+off] += v & (1 << 1)
+		counts[2+off] += v & (1 << 2)
+		counts[3+off] += v & (1 << 3)
+		counts[4+off] += v & (1 << 4)
+		counts[5+off] += v & (1 << 5)
+		counts[6+off] += v & (1 << 6)
+		counts[7+off] += v & (1 << 7)
+
+		counts[8+off] += v & (1 << 8)
+		counts[9+off] += v & (1 << 9)
+		counts[10+off] += v & (1 << 10)
+		counts[11+off] += v & (1 << 11)
+		counts[12+off] += v & (1 << 12)
+		counts[13+off] += v & (1 << 13)
+		counts[14+off] += v & (1 << 14)
+		counts[15+off] += v & (1 << 15)
+
+		v = uint32(buf[i] >> 32)
+		off = 32
+		counts[0+off] += v & 1
+		counts[1+off] += v & (1 << 1)
+		counts[2+off] += v & (1 << 2)
+		counts[3+off] += v & (1 << 3)
+		counts[4+off] += v & (1 << 4)
+		counts[5+off] += v & (1 << 5)
+		counts[6+off] += v & (1 << 6)
+		counts[7+off] += v & (1 << 7)
+
+		counts[8+off] += v & (1 << 8)
+		counts[9+off] += v & (1 << 9)
+		counts[10+off] += v & (1 << 10)
+		counts[11+off] += v & (1 << 11)
+		counts[12+off] += v & (1 << 12)
+		counts[13+off] += v & (1 << 13)
+		counts[14+off] += v & (1 << 14)
+		counts[15+off] += v & (1 << 15)
+
+		v >>= 16
+		off += 16
+		counts[0+off] += v & 1
+		counts[1+off] += v & (1 << 1)
+		counts[2+off] += v & (1 << 2)
+		counts[3+off] += v & (1 << 3)
+		counts[4+off] += v & (1 << 4)
+		counts[5+off] += v & (1 << 5)
+		counts[6+off] += v & (1 << 6)
+		counts[7+off] += v & (1 << 7)
+
+		counts[8+off] += v & (1 << 8)
+		counts[9+off] += v & (1 << 9)
+		counts[10+off] += v & (1 << 10)
+		counts[11+off] += v & (1 << 11)
+		counts[12+off] += v & (1 << 12)
+		counts[13+off] += v & (1 << 13)
+		counts[14+off] += v & (1 << 14)
+		counts[15+off] += v & (1 << 15)
+	}
+
+	return
+}
+
+// count64 reference implementation for tests.  Do not alter.
 func count64safe(counts *[64]int, buf []uint64) {
 	for i := 0; i < len(buf); i++ {
 		for j := 0; j < 64; j++ {
