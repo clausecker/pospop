@@ -1,3 +1,5 @@
+// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+
 // +build ignore
 
 #include "textflag.h"

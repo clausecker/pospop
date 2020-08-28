@@ -1,3 +1,5 @@
+// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+
 // Copyright ©2020 Robert Clausecker <fuz@fuz.su>.  All rights reserved.
 
 // Positional population counts.

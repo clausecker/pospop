@@ -1,3 +1,9 @@
+// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+
+// This is a prototype for an ARM64 kernel for Count8.
+// It awaits translation to Go-style assembly pending
+// improvements in the assembler shipped with Go.
+
 	// b:a = a+b+c, v31.16b used for scratch space
 	.macro csa, a, b, c
 	eor v31.16b, \a\().16b, \b\().16b
@@ -28,7 +34,7 @@ count8asm15:
 
 	// scalar head to reach 16 byte alignment
 	and x3, x2, #15			// how far we are off the alignment
-	cbz x3, 3f			// skip scalar head if already aligned	
+	cbz x3, 3f			// skip scalar head if already aligned
 	sub x2, x2, x3			// apply alignment to x2
 	tst x3, #1			// unroll loop once (duff style)
 	bne 1f

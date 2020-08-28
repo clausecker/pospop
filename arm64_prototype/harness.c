@@ -1,3 +1,8 @@
+/*-
+ * Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+ */
+
+/* benchmark harness for the prototype */
 #define _XOPEN_SOURCE 700
 #include <stdio.h>
 #include <stdlib.h>

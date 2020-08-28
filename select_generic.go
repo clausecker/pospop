@@ -1,3 +1,5 @@
+// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+
 // +build !amd64,!386
 
 package pospop

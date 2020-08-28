@@ -1,3 +1,5 @@
+// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+
 #include "textflag.h"
 
 // 8 bit positional population count using AVX-2.

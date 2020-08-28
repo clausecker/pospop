@@ -26,5 +26,7 @@ Work left to do:
  * provide variants of Count16, Count32, and Count64 working on byte
    arrays
 
-(c) 2020 Robert Clausecker <fuz@fuz.su>.  All rights reserved.
-An open source license will be decided on in a future release.
+(c) 2020 Robert Clausecker <fuz@fuz.su>.  All Rights Reserved.
+
+This code is published under a 2-clause BSD license.  See the file
+COPYING for details.
