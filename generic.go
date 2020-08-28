@@ -6,17 +6,17 @@ package pospop
 // Maximum data length for one iteration of an inner
 // counting function for the generic implementations.
 // Any larger and the 32 bit counters might overflow.
-const genericMaxLen = 1 << 16 - 1
+const genericMaxLen = 1<<16 - 1
 
 // count8 generic implementation
 func count8generic(counts *[8]int, buf []uint8) {
 	for i := 0; i < len(buf); i += genericMaxLen {
 		n := genericMaxLen
-		if (n > len(buf) - i) {
+		if n > len(buf)-i {
 			n = len(buf) - i
 		}
 
-		roundCounts := count8genericRound(buf[i:i+n])
+		roundCounts := count8genericRound(buf[i : i+n])
 
 		for j := range roundCounts {
 			counts[j] += int(roundCounts[j] >> (j & 0xf))
@@ -54,11 +54,11 @@ func count8safe(counts *[8]int, buf []uint8) {
 func count16generic(counts *[16]int, buf []uint16) {
 	for i := 0; i < len(buf); i += genericMaxLen {
 		n := genericMaxLen
-		if (n > len(buf) - i) {
+		if n > len(buf)-i {
 			n = len(buf) - i
 		}
 
-		roundCounts := count16genericRound(buf[i:i+n])
+		roundCounts := count16genericRound(buf[i : i+n])
 
 		for j := range roundCounts {
 			counts[j] += int(roundCounts[j] >> (j & 0xf))
@@ -105,18 +105,17 @@ func count16safe(counts *[16]int, buf []uint16) {
 func count32generic(counts *[32]int, buf []uint32) {
 	for i := 0; i < len(buf); i += genericMaxLen {
 		n := genericMaxLen
-		if (n > len(buf) - i) {
+		if n > len(buf)-i {
 			n = len(buf) - i
 		}
 
-		roundCounts := count32genericRound(buf[i:i+n])
+		roundCounts := count32genericRound(buf[i : i+n])
 
 		for j := range roundCounts {
 			counts[j] += int(roundCounts[j] >> (j & 0xf))
 		}
 	}
 }
-
 
 // A single count32 round, accumulating into 32 bit counters.
 func count32genericRound(buf []uint32) (counts [32]uint32) {
@@ -177,11 +176,11 @@ func count32safe(counts *[32]int, buf []uint32) {
 func count64generic(counts *[64]int, buf []uint64) {
 	for i := 0; i < len(buf); i += genericMaxLen {
 		n := genericMaxLen
-		if (n > len(buf) - i) {
+		if n > len(buf)-i {
 			n = len(buf) - i
 		}
 
-		roundCounts := count64genericRound(buf[i:i+n])
+		roundCounts := count64genericRound(buf[i : i+n])
 
 		for j := range roundCounts {
 			counts[j] += int(roundCounts[j] >> (j & 0xf))
