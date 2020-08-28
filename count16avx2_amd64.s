@@ -17,11 +17,11 @@
 
 // magic transposition constants, comparison constants
 DATA magic<>+ 0(SB)/8, $0x8040201008040201
-DATA magic<>+ 8(SB)/4, $0x00aa00aa
+DATA magic<>+ 8(SB)/2, $0x00aa
+DATA magic<>+10(SB)/2, $0x0f0f
 DATA magic<>+12(SB)/4, $0x0000cccc
-DATA magic<>+16(SB)/4, $0x0f0f0f0f
-DATA magic<>+20(SB)/4, $0x01010101
-GLOBL magic<>(SB), RODATA|NOPTR, $24
+DATA magic<>+16(SB)/4, $0x01010101
+GLOBL magic<>(SB), RODATA|NOPTR, $20
 
 // pseudo-transpose the 4x8 bit matrices in Y.  Transforms
 // Y = D7D6D5D4 D3D2D1D0 C7C6C5C4 C3C2C1C0 B7B6B5B4 B3B2B1B0 A7A6A5A4 A3A2A1A0
@@ -55,9 +55,9 @@ TEXT ·count16avx2(SB),NOSPLIT,$0-32
 	SUBQ $15*32/2, CX			// pre-decrement CX
 	JL end15
 
-	VPBROADCASTD magic<>+ 8(SB), Y14	// for TRANSPOSE
+	VPBROADCASTW magic<>+ 8(SB), Y14	// for TRANSPOSE
 	VPBROADCASTD magic<>+12(SB), Y15	// for TRANSPOSE
-	VPBROADCASTD magic<>+16(SB), Y13	// low nibbles
+	VPBROADCASTW magic<>+10(SB), Y13	// low nibbles
 
 vec15:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VMOVDQU 1*32(SI), Y1		// and sum them into Y3:Y2:Y1:Y0
@@ -167,7 +167,7 @@ end15:	SUBQ $(2/2)-15*(32/2), CX	// undo last subtraction and
 	// scalar tail: process two bytes at a time
 	VPXOR X0, X0, X0		// X1: 16 byte sized counters
 	VPBROADCASTQ magic<>+0(SB), X2	// X2: mask of bits positions
-	VMOVD magic<>+20(SB), X3	// X3: permutation vector to broadcast
+	VMOVD magic<>+16(SB), X3	// X3: permutation vector to broadcast
 	VPSHUFD $0x05, X3, X3		// one byte into low 8 bytes and another
 					// bytes into the high 8 bytes
 
