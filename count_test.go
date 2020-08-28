@@ -1,7 +1,9 @@
 package pospop
 
-import "math/rand"
-import "testing"
+import (
+	"math/rand"
+	"testing"
+)
 
 // standard test lengths to try
 var testLengths = []int{
@@ -37,7 +39,7 @@ func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 		refCounts := counts
 
 		count8(&counts, buf)
-		count8generic(&refCounts, buf)
+		count8safe(&refCounts, buf)
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match", len)
@@ -58,7 +60,7 @@ func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 		refCounts := counts
 
 		count16(&counts, buf)
-		count16generic(&refCounts, buf)
+		count16safe(&refCounts, buf)
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match", len)
@@ -79,7 +81,7 @@ func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 		refCounts := counts
 
 		count32(&counts, buf)
-		count32generic(&refCounts, buf)
+		count32safe(&refCounts, buf)
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match", len)
@@ -100,7 +102,7 @@ func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 		refCounts := counts
 
 		count64(&counts, buf)
-		count64generic(&refCounts, buf)
+		count64safe(&refCounts, buf)
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match", len)

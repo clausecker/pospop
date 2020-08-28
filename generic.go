@@ -72,7 +72,7 @@ func count16safe(counts *[16]int, buf []uint16) {
 }
 
 func count32generic(counts *[32]int, buf []uint32) {
-	if uint64(len(buf)) >= 1<<(64-32) {
+	if uint64(len(buf)) >= 1<<(64-16) {
 		// Use fallback if we risk overflowing
 		count32safe(counts, buf)
 		return
@@ -118,7 +118,7 @@ func count32generic(counts *[32]int, buf []uint32) {
 		tmp[15+off] += uint64(v & (1 << 15))
 	}
 	for i, v := range tmp[:] {
-		(*counts)[i] += int(v >> i)
+		(*counts)[i] += int(v >> (i & 15))
 	}
 }
 
