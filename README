@@ -15,10 +15,11 @@ Performance with a 100 kB buffer on an Intel(R) Xeon(R) W-2133 CPU
 	amd64/avx2	amd64/sse2	386/avx2	386/sse2
 Count8	30.0 GB/s	14.3 GB/s	28.6 GB/s	14.6 GB/s
 Count16	27.1 GB/s	13.0 GB/s	28.3 GB/s	14.6 GB/s
+Count32	25.9 GB/s	10.8 GB/s	26.9 GB/s	13.3 GB/s
 
 Work left to do:
 
- * provide assembly kernels for Count32 and Count64
+ * provide assembly kernels for Count64
  * port the arm64 kernel(s) to Go-style asm, pending improvements to
    the Go assembler; Go 1.16 will be required to use these kernels.
  * provide assembly kernels for arm, ppcle, and others
