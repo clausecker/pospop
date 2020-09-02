@@ -278,7 +278,7 @@ tail1:	SUBL $-8, CX			// anything left to process?
 	VPANDN X5, X6, X5		// and mask out the desired bytes
 
 	VPBROADCASTD X5, Y4
-	VPSRLDQ $8, X5, X5
+	VPSRLDQ $4, X5, X5
 	VPBROADCASTD X5, Y5
 	VPSHUFB Y3, Y4, Y4
 	VPSHUFB Y3, Y5, Y5
@@ -363,7 +363,7 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 	VMOVDQU Y2, (k+0)*8(DI) \
 	VMOVDQU Y3, (k+4)*8(DI) \
 	VPUNPCKLDQ Y12, Y1, Y2 \
-	VPUNPCKLDQ Y12, Y1, Y3 \
+	VPUNPCKHDQ Y12, Y1, Y3 \
 	VPADDQ (k+8)*8(DI), Y2, Y2 \
 	VPADDQ (k+12)*8(DI), Y3, Y3 \
 	VMOVDQU Y2, (k+8)*8(DI) \
