@@ -306,7 +306,7 @@ end:	VPXOR Y7, Y7, Y7
 	RET
 
 // Count16 accumulation function.  Accumulates words Y8--Y11
-// into 16 qword counters add (DI).  Trashes Y0--Y11.
+// into 16 qword counters at (DI).  Trashes Y0--Y11.
 TEXT accum16<>(SB), NOSPLIT, $0-0
 	VPXOR Y12, Y12, Y12		// zero register
 
@@ -337,7 +337,7 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 	VPUNPCKHDQ Y12, Y0, Y1
 	VPUNPCKLDQ Y12, Y0, Y0
 	VPUNPCKHDQ Y12, Y2, Y3
-	VPUNPCKHDQ Y12, Y2, Y2
+	VPUNPCKLDQ Y12, Y2, Y2
 
 	VPADDQ Y4, Y0, Y4
 	VPADDQ Y5, Y1, Y5
@@ -351,12 +351,50 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 
 	RET
 
-// func count8avx2(counts *[16]int, buf []uint16)
+// accumulate the 16 counters in Y into k*8(DI) to (k+15)*8(DI)
+// trashes Y0--Y3.  Assumes Y12 == 0
+#define ACCUM(k, Y) \
+	VPUNPCKLWD Y12, Y, Y0 \
+	VPUNPCKHWD Y12, Y, Y1 \
+	VPUNPCKLDQ Y12, Y0, Y2 \
+	VPUNPCKHDQ Y12, Y0, Y3 \
+	VPADDQ (k+0)*8(DI), Y2, Y2 \
+	VPADDQ (k+4)*8(DI), Y3, Y3 \
+	VMOVDQU Y2, (k+0)*8(DI) \
+	VMOVDQU Y3, (k+4)*8(DI) \
+	VPUNPCKLDQ Y12, Y1, Y2 \
+	VPUNPCKLDQ Y12, Y1, Y3 \
+	VPADDQ (k+8)*8(DI), Y2, Y2 \
+	VPADDQ (k+12)*8(DI), Y3, Y3 \
+	VMOVDQU Y2, (k+8)*8(DI) \
+	VMOVDQU Y3, (k+12)*8(DI)
+
+// Count64 accumulation function.  Accumulates words Y8--Y11
+// into 64 qword counters at (DI).
+TEXT accum64<>(SB), NOSPLIT, $0-0
+	VPXOR Y12, Y12, Y12
+	ACCUM(0, Y8)
+	ACCUM(16, Y9)
+	ACCUM(32, Y10)
+	ACCUM(48, Y11)
+	RET
+
+// func count16avx2(counts *[16]int, buf []uint16)
 TEXT ·count16avx2(SB), 0, $0-32
 	MOVQ counts+0(FP), DI
 	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 	MOVQ $accum16<>(SB), BX
 	SHLQ $1, CX			// count in bytes
+	CALL countavx<>(SB)
+	RET
+
+// func count64avx2(counts *[64]int, buf []uint64)
+TEXT ·count64avx2(SB), 0, $0-32
+	MOVQ counts+0(FP), DI
+	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
+	MOVQ buf_len+16(FP), CX		// CX = len(buf)
+	MOVQ $accum64<>(SB), BX
+	SHLQ $3, CX			// count in bytes
 	CALL countavx<>(SB)
 	RET
