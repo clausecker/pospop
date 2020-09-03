@@ -115,10 +115,10 @@ head:	VPBROADCASTD scratch-32+0(SP)(DX*8), Y4
 	JLT head
 
 	// initialise counters to what we have
-nohead:	VPUNPCKLBW Y7, Y0, Y8
-	VPUNPCKHBW Y7, Y0, Y9
-	VPUNPCKLBW Y7, Y1, Y10
-	VPUNPCKHBW Y7, Y1, Y11
+nohead:	VPUNPCKLBW Y7, Y0, Y8		// 0-7, 16-23
+	VPUNPCKHBW Y7, Y0, Y9		// 8-15, 24-31
+	VPUNPCKLBW Y7, Y1, Y10		// 32-39, 48-55
+	VPUNPCKHBW Y7, Y1, Y11		// 40-47, 56-63
 
 	SUBQ $15*32, CX			// enough data left to process?
 	JLT endvec			// also, pre-subtract
@@ -215,16 +215,16 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VPUNPCKLDQ Y5, Y4, Y1
 
 	// zero-extend and add to Y8--Y11
-	VPMOVZXBW X0, Y2
-	VPMOVZXBW X1, Y3
-	VEXTRACTI128 $1, Y0, X0
-	VEXTRACTI128 $1, Y1, X1
-	VPADDW Y2, Y8, Y8
-	VPADDW Y3, Y9, Y9
-	VPMOVZXBW X0, Y2
-	VPMOVZXBW X1, Y3
-	VPADDW Y2, Y10, Y10
-	VPADDW Y3, Y11, Y11
+	VPXOR Y7, Y7, Y7
+	VPUNPCKLBW Y7, Y0, Y4
+	VPUNPCKHBW Y7, Y0, Y5
+	VPUNPCKLBW Y7, Y1, Y6
+	VPUNPCKHBW Y7, Y1, Y7
+
+	VPADDW Y4, Y8, Y8
+	VPADDW Y5, Y9, Y9
+	VPADDW Y6, Y10, Y10
+	VPADDW Y7, Y11, Y11
 
 	SUBL $15*4, AX			// account for possible overflow
 	CMPL AX, $15*4			// enough space left in the counters?
@@ -303,6 +303,7 @@ end:	VPXOR Y7, Y7, Y7
 
 	// and perform a final accumulation
 	CALL *BX
+	VZEROUPPER
 	RET
 
 // Count16 accumulation function.  Accumulates words Y8--Y11
@@ -356,27 +357,29 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 #define ACCUM(k, Y) \
 	VPUNPCKLWD Y12, Y, Y0 \
 	VPUNPCKHWD Y12, Y, Y1 \
+	VPERMQ $0xd8, Y0, Y0 \
+	VPERMQ $0xd8, Y1, Y1 \
 	VPUNPCKLDQ Y12, Y0, Y2 \
 	VPUNPCKHDQ Y12, Y0, Y3 \
 	VPADDQ (k+0)*8(DI), Y2, Y2 \
-	VPADDQ (k+4)*8(DI), Y3, Y3 \
+	VPADDQ (k+16)*8(DI), Y3, Y3 \
 	VMOVDQU Y2, (k+0)*8(DI) \
-	VMOVDQU Y3, (k+4)*8(DI) \
+	VMOVDQU Y3, (k+16)*8(DI) \
 	VPUNPCKLDQ Y12, Y1, Y2 \
 	VPUNPCKHDQ Y12, Y1, Y3 \
-	VPADDQ (k+8)*8(DI), Y2, Y2 \
-	VPADDQ (k+12)*8(DI), Y3, Y3 \
-	VMOVDQU Y2, (k+8)*8(DI) \
-	VMOVDQU Y3, (k+12)*8(DI)
+	VPADDQ (k+4)*8(DI), Y2, Y2 \
+	VPADDQ (k+20)*8(DI), Y3, Y3 \
+	VMOVDQU Y2, (k+4)*8(DI) \
+	VMOVDQU Y3, (k+20)*8(DI)
 
 // Count64 accumulation function.  Accumulates words Y8--Y11
 // into 64 qword counters at (DI).
 TEXT accum64<>(SB), NOSPLIT, $0-0
 	VPXOR Y12, Y12, Y12
 	ACCUM(0, Y8)
-	ACCUM(16, Y9)
+	ACCUM(8, Y9)
 	ACCUM(32, Y10)
-	ACCUM(48, Y11)
+	ACCUM(40, Y11)
 	RET
 
 // func count16avx2(counts *[16]int, buf []uint16)
