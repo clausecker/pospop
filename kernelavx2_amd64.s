@@ -314,46 +314,48 @@ end:	VPXOR Y7, Y7, Y7
 // Count16 accumulation function.  Accumulates words Y8--Y11
 // into 16 qword counters at (DI).  Trashes Y0--Y11.
 TEXT accum16<>(SB), NOSPLIT, $0-0
+	// zero-extend Y8--Y11 to dwords
 	VPXOR Y12, Y12, Y12		// zero register
+	VPUNPCKLWD Y12, Y8, Y0		//  0- 3, 16-19
+	VPUNPCKHWD Y12, Y8, Y8		//  4- 7, 20-23
+	VPUNPCKLWD Y12, Y9, Y1		//  8-11, 24-27
+	VPUNPCKHWD Y12, Y9, Y9		// 12-15, 28-31
+	VPUNPCKLWD Y12, Y10, Y2		// 32-35, 48-51
+	VPUNPCKHWD Y12, Y10, Y10	// 36-39, 52-55
+	VPUNPCKLWD Y12, Y11, Y3		// 40-43, 56-59
+	VPUNPCKHWD Y12, Y11, Y11	// 44-47, 60-63
 
-	// load counters from (DI)
-	VMOVDQU  0*8(DI), Y4
-	VMOVDQU  4*8(DI), Y5
-	VMOVDQU  8*8(DI), Y6
-	VMOVDQU 12*8(DI), Y7
+	// fold over upper 32 counters over lower 32 counters
+	VPADDD Y0, Y2, Y0		//  0- 3, 16-19
+	VPADDD Y8, Y10, Y8		//  4- 7, 20-23
+	VPADDD Y1, Y3, Y1		//  8-11, 24-27
+	VPADDD Y9, Y11, Y9		// 12-15, 28-31
 
-	// zero-extend Y8--Y11 to dwords and reduce
-	// from 64 counters to 16 counters
-	VPUNPCKLWD Y12, Y8, Y0
-	VPUNPCKHWD Y12, Y8, Y8
-	VPUNPCKLWD Y12, Y9, Y1
-	VPUNPCKHWD Y12, Y9, Y9
-	VPADDD Y8, Y0, Y0
-	VPADDD Y9, Y1, Y1
+	// fold over upper 16 bit over lower 32 counters
+	VPERM2I128 $0x20, Y8, Y0, Y2	//  0- 3,  4- 7
+	VPERM2I128 $0x31, Y8, Y0, Y10	// 16-19, 20-23
+	VPADDD Y2, Y10, Y0		//  0- 7
+	VPERM2I128 $0x20, Y9, Y1, Y3	//  8-11, 12-15
+	VPERM2I128 $0x31, Y9, Y1, Y11	// 24-27, 29-31
+	VPADDD Y3, Y11, Y2
 
-	VPUNPCKLWD Y12, Y10, Y2
-	VPUNPCKHWD Y12, Y10, Y10
-	VPUNPCKLWD Y12, Y11, Y3
-	VPUNPCKHWD Y12, Y11, Y11
-	VPADDD Y10, Y2, Y2
-	VPADDD Y11, Y3, Y3
-	VPADDD Y2, Y0, Y0
-	VPADDD Y3, Y1, Y2
+	// zero extend into qwords and add to counters
+	VPERMQ $0xd8, Y0, Y0		//  0,  1,  4,  5,  2,  3,  6,  7
+	VPERMQ $0xd8, Y2, Y2		//  8,  9, 12, 13, 10, 11, 14, 15
+	VPUNPCKHDQ Y12, Y0, Y1		//   4- 7
+	VPUNPCKLDQ Y12, Y0, Y0		//   0- 3
+	VPADDQ  0*8(DI), Y0, Y0
+	VPADDQ  4*8(DI), Y1, Y1
+	VPUNPCKHDQ Y12, Y2, Y3		//  12-15
+	VPUNPCKLDQ Y12, Y2, Y2		//   8-11
+	VPADDQ  8*8(DI), Y2, Y2
+	VPADDQ 12*8(DI), Y3, Y3
 
-	VPUNPCKHDQ Y12, Y0, Y1
-	VPUNPCKLDQ Y12, Y0, Y0
-	VPUNPCKHDQ Y12, Y2, Y3
-	VPUNPCKLDQ Y12, Y2, Y2
-
-	VPADDQ Y4, Y0, Y4
-	VPADDQ Y5, Y1, Y5
-	VPADDQ Y6, Y2, Y6
-	VPADDQ Y7, Y3, Y7
-
-	VMOVDQU Y4,  0*8(DI)
-	VMOVDQU Y5,  4*8(DI)
-	VMOVDQU Y6,  8*8(DI)
-	VMOVDQU Y7, 12*8(DI)
+	// write counters back
+	VMOVDQU Y0,  0*8(DI)
+	VMOVDQU Y1,  4*8(DI)
+	VMOVDQU Y2,  8*8(DI)
+	VMOVDQU Y3, 12*8(DI)
 
 	RET
 
