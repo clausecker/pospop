@@ -189,7 +189,6 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VPSRLD $4, Y0, Y0
 	VPAND Y1, Y13, Y5
 	VPSRLD $4, Y1, Y1
-	VPADDB Y4, Y5, Y4
 	VPAND Y2, Y13, Y6
 	VPSRLD $4, Y2, Y2
 	VPAND Y3, Y13, Y7
@@ -208,11 +207,11 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 
 	// sum up high nibbles into Y5
 	VPADDB Y0, Y1, Y0
-	VPADDB Y2, Y4, Y1
+	VPADDB Y2, Y3, Y1
 	VPADDB Y0, Y1, Y5
 
 	VPUNPCKLDQ Y5, Y4, Y0
-	VPUNPCKLDQ Y5, Y4, Y1
+	VPUNPCKHDQ Y5, Y4, Y1
 
 	// zero-extend and add to Y8--Y11
 	VPXOR Y7, Y7, Y7
