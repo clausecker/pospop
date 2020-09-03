@@ -60,8 +60,8 @@ func benchmarkCount16(b *testing.B, buf []uint16, lengths []int, count16 func(*[
 	for _, l := range lengths {
 		b.Run(strconv.Itoa(l), func(b *testing.B) {
 			var counts [16]int
-			testbuf := buf[:l]
-			b.SetBytes(int64(l) * 2)
+			testbuf := buf[:l/2]
+			b.SetBytes(int64(l))
 			for i := 0; i < b.N; i++ {
 				count16(&counts, testbuf)
 			}
@@ -103,8 +103,8 @@ func benchmarkCount32(b *testing.B, buf []uint32, lengths []int, count32 func(*[
 	for _, l := range lengths {
 		b.Run(strconv.Itoa(l), func(b *testing.B) {
 			var counts [32]int
-			testbuf := buf[:l]
-			b.SetBytes(int64(l) * 4)
+			testbuf := buf[:l/4]
+			b.SetBytes(int64(l))
 			for i := 0; i < b.N; i++ {
 				count32(&counts, testbuf)
 			}
@@ -146,8 +146,8 @@ func benchmarkCount64(b *testing.B, buf []uint64, lengths []int, count64 func(*[
 	for _, l := range lengths {
 		b.Run(strconv.Itoa(l), func(b *testing.B) {
 			var counts [64]int
-			testbuf := buf[:l]
-			b.SetBytes(int64(l) * 8)
+			testbuf := buf[:l/8]
+			b.SetBytes(int64(l))
 			for i := 0; i < b.N; i++ {
 				count64(&counts, testbuf)
 			}
