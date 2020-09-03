@@ -233,11 +233,8 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 
 	SUBL $15*4, AX			// account for possible overflow
 	CMPL AX, $15*4			// enough space left in the counters?
-	JL no_space
-	SUBQ $15*32, CX			// account for bytes consumed
-	JGE vec
+	JGE have_space
 
-no_space:
 	// flush accumulators into counters
 	CALL *BX			// call accumulation function
 	VPXOR Y8, Y8, Y8		// clear accumulators for next round
@@ -247,6 +244,7 @@ no_space:
 
 	MOVL $65535, AX			// space left til overflow could occur
 
+have_space:
 	SUBQ $15*32, CX			// account for bytes consumed
 	JGE vec
 
