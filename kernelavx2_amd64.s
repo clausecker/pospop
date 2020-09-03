@@ -195,9 +195,11 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VPSRLD $4, Y3, Y3
 
 	// sum up low nibbles into Y4
-	VPADDB Y4, Y5, Y4
-	VPADDB Y6, Y7, Y5
-	VPADDB Y4, Y5, Y4
+	VPADDB Y4, Y6, Y6
+	VPADDB Y5, Y7, Y7
+	VPERM2I128 $0x20, Y7, Y6, Y4
+	VPERM2I128 $0x31, Y7, Y6, Y5
+	VPADDB Y5, Y4, Y4
 
 	// pull out high nibbles from matrices
 	VPAND Y0, Y13, Y0
@@ -206,12 +208,16 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VPAND Y3, Y13, Y3
 
 	// sum up high nibbles into Y5
-	VPADDB Y0, Y1, Y0
-	VPADDB Y2, Y3, Y1
-	VPADDB Y0, Y1, Y5
+	VPADDB Y0, Y2, Y2
+	VPADDB Y1, Y3, Y3
+	VPERM2I128 $0x20, Y3, Y2, Y0
+	VPERM2I128 $0x31, Y3, Y2, Y1
+	VPADDB Y1, Y0, Y5
 
-	VPUNPCKLDQ Y5, Y4, Y0
-	VPUNPCKHDQ Y5, Y4, Y1
+	VPUNPCKLDQ Y5, Y4, Y2
+	VPUNPCKHDQ Y5, Y4, Y3
+	VPERM2I128 $0x20, Y3, Y2, Y0
+	VPERM2I128 $0x31, Y3, Y2, Y1
 
 	// zero-extend and add to Y8--Y11
 	VPXOR Y7, Y7, Y7
@@ -227,8 +233,11 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 
 	SUBL $15*4, AX			// account for possible overflow
 	CMPL AX, $15*4			// enough space left in the counters?
-	JLE have_space
+	JL no_space
+	SUBQ $15*32, CX			// account for bytes consumed
+	JGE vec
 
+no_space:
 	// flush accumulators into counters
 	CALL *BX			// call accumulation function
 	VPXOR Y8, Y8, Y8		// clear accumulators for next round
@@ -238,7 +247,6 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 
 	MOVL $65535, AX			// space left til overflow could occur
 
-have_space:
 	SUBQ $15*32, CX			// account for bytes consumed
 	JGE vec
 
