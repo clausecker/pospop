@@ -1,11 +1,11 @@
 #include "textflag.h"
-#include "funcdata.h"
 
-// AVX2 based kernels for the position population count operation.  All
-// these kernels have the same backbone based on a 15-fold CSA reduction
-// to first reduce 480 byte into 4x16 byte, followed by a bunch of
-// shuffles to group the positional registers into nibbles.  These are
-// then summed up using a width-specific summation function.
+// AVX2 based kernels for the positional population count operation.
+// All these kernels have the same backbone based on a 15-fold CSA
+// reduction to first reduce 480 byte into 4x32 byte, followed by a
+// bunch of shuffles to group the positional registers into nibbles.
+// These are then summed up using a width-specific summation function.
+// Required CPU extension: AVX2.
 
 // magic transposition constants, comparison constants
 DATA magic<>+ 0(SB)/8, $0x0000000000000000
@@ -56,23 +56,23 @@ GLOBL window<>(SB), RODATA|NOPTR, $64
 	VPXOR Y, Y12, Y
 
 // Generic kernel.  This function expects a pointer to a width-specific
-// accumulation function in BX, a 32 byte aligned input buffer pointer
-// in SI, a pointer to counters in DI and a remaining length in CX.
+// accumulation function in BX, a possibly unaligned input buffer in SI,
+// counters in DI and a remaining length in CX.
 TEXT countavx<>(SB), NOSPLIT, $32-0
 	TESTQ CX, CX			// any data to process at all?
-	CMOVQEQ CX, SI			// if yes, make it so we don't attempt to load a head
+	CMOVQEQ CX, SI			// if not, avoid loading head
 
 	// constants for processing the head
-	VPBROADCASTQ magic<>+32(SB), Y2	// byte mask
+	VPBROADCASTQ magic<>+32(SB), Y2	// bit position mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
 	VPXOR Y7, Y7, Y7		// zero register
 	VPXOR Y0, Y0, Y0		// lower counter register
 	VPXOR Y1, Y1, Y1		// upper counter register
 
 	// load head into scratch space (until alignment/end is reached)
-	MOVL SI, DX			// make a copy of SI
+	MOVL SI, DX
 	ANDL $31, DX			// offset of the buffer start from 32 byte alignment
-	JZ nohead			// if source buffer is aligned, skip head porcessing
+	JEQ nohead			// if source buffer is aligned, skip head processing
 	MOVL $32, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
 	VMOVDQA -32(SI)(AX*1), Y4	// load head
@@ -80,10 +80,9 @@ TEXT countavx<>(SB), NOSPLIT, $32-0
 	VMOVDQU (DX)(AX*1), Y5		// load mask of the bytes that are part of the head
 	VPAND Y5, Y4, Y4		// and mask out those bytes that are not
 	CMPQ AX, CX			// is the head shorter than the buffer?
-	JL norunt			// if yes, perform special processing
+	JLT norunt			// if yes, perform special processing
 
-	// special processing if the buffer is short and doesn't cross
-	// a 32 byte boundary
+	// buffer is short and does not cross a 32 byte boundary
 	SUBL CX, AX			// number of bytes by which we overshoot the buffer
 	VMOVDQU (DX)(AX*1), Y5		// load mask of bytes that overshoot the buffer
 	VPANDN Y4, Y5, Y4		// and clear them in Y4
@@ -123,9 +122,9 @@ nohead:	VPUNPCKLBW Y7, Y0, Y8		// 0-7, 16-23
 	SUBQ $15*32, CX			// enough data left to process?
 	JLT endvec			// also, pre-subtract
 
-	VPBROADCASTD magic<>+40(SB), Y15 // for transpose
-	VPBROADCASTD magic<>+44(SB), Y14 // for transpose
-	VPBROADCASTD magic<>+48(SB), Y13 // low nibbles
+	VPBROADCASTD magic<>+40(SB), Y15 // 0x0000cccc for transpose
+	VPBROADCASTD magic<>+44(SB), Y14 // 0x00aa00aa for transpose
+	VPBROADCASTD magic<>+48(SB), Y13 // 0x0f0f0f0f for deinterleaving the nibbles
 
 	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
 
