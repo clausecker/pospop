@@ -54,11 +54,11 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 // Process 4 bytes from S.  Add low word counts to L, high to H
 // assumes mask loaded into X2.  Trashes X4, X5.
 #define COUNT4(L, H, S) \
-	MOVD S, X4 \
-	PUNPCKLBW X4, X4 \
-	PUNPCKLWL X4, X4 \
-	PSHUFD $0xee, X4, X5 \
-	PUNPCKLLQ X4, X4 \
+	MOVD S, X4 \			// X4 = ----:----:----:3210
+	PUNPCKLBW X4, X4 \		// X4 = ----:----:3322:1100
+	PUNPCKLWL X4, X4 \		// X4 = 3333:2222:1111:0000
+	PSHUFD $0xfa, X4, X5 \		// X5 = 3333:3333:2222:2222
+	PUNPCKLLQ X4, X4 \		// X5 = 1111:1111:0000:0000
 	PAND X2, X4 \
 	PAND X2, X5 \
 	PCMPEQB X2, X4 \
@@ -72,8 +72,8 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 	MOVOA X, X6 \
 	PUNPCKLBW X7, X \
 	PUNPCKHBW X7, X6 \
-	PADDB S1, X \
-	PADDB S2, X6 \
+	PADDW S1, X \
+	PADDW S2, X6 \
 	MOVOA X, S1 \
 	MOVOA X6, S2
 
@@ -158,8 +158,8 @@ nohead:	MOVOA X8, X0
 
 	MOVQ magic<>+8(SB), X14
 	MOVD magic<>+16(SB), X13
-	PSHUFD $0x55, X14, X15		// 0x0000cccc for transposition
-	PSHUFD $0xaa, X14, X14		// 0x00aa00aa for transposition
+	PSHUFD $0x00, X14, X15		// 0x0000cccc for transposition
+	PSHUFD $0x55, X14, X14		// 0x00aa00aa for transposition
 	PSHUFD $0x00, X13, X13		// 0x0f0f0f0f for deinterleaving the nibbles
 
 	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
@@ -357,7 +357,6 @@ end:	MOVOA X8, X0
 	PADDW 6*16(BP), X6
 	PADDW 7*16(BP), X7
 
-	// and perform a final accumulation
 	CALL *BX
 	RET
 
@@ -392,37 +391,37 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 
 	MOVOA X2, X0
 	PUNPCKLWL X12, X0
-	PUNPCKLWL X12, X2
+	PUNPCKHWL X12, X2
 	ACCUMQ(16, X0, X1)
 	ACCUMQ(20, X2, X0)
 
 	MOVOA X3, X0
 	PUNPCKLWL X12, X0
-	PUNPCKLWL X12, X3
+	PUNPCKHWL X12, X3
 	ACCUMQ(24, X0, X1)
 	ACCUMQ(28, X3, X0)
 
 	MOVOA X4, X0
 	PUNPCKLWL X12, X0
-	PUNPCKLWL X12, X4
+	PUNPCKHWL X12, X4
 	ACCUMQ(32, X0, X1)
 	ACCUMQ(36, X4, X0)
 
 	MOVOA X5, X0
 	PUNPCKLWL X12, X0
-	PUNPCKLWL X12, X5
+	PUNPCKHWL X12, X5
 	ACCUMQ(40, X0, X1)
 	ACCUMQ(44, X5, X0)
 
 	MOVOA X6, X0
 	PUNPCKLWL X12, X0
-	PUNPCKLWL X12, X6
+	PUNPCKHWL X12, X6
 	ACCUMQ(48, X0, X1)
 	ACCUMQ(52, X6, X0)
 
 	MOVOA X7, X0
 	PUNPCKLWL X12, X0
-	PUNPCKLWL X12, X7
+	PUNPCKHWL X12, X7
 	ACCUMQ(56, X0, X1)
 	ACCUMQ(60, X7, X0)
 
