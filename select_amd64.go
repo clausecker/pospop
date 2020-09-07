@@ -14,6 +14,7 @@ func count32avx2(counts *[32]int, buf []uint32)
 func count32sse2(counts *[32]int, buf []uint32)
 
 func count64avx2(counts *[64]int, buf []uint64)
+func count64sse2(counts *[64]int, buf []uint64)
 
 var count8funcs = []count8impl{
 	{count8avx2, "avx2", cpu.X86.HasAVX2 && cpu.X86.HasPOPCNT},
@@ -35,5 +36,6 @@ var count32funcs = []count32impl{
 
 var count64funcs = []count64impl{
 	{count64avx2, "avx2", cpu.X86.HasAVX2},
+	{count64sse2, "sse2", cpu.X86.HasSSE2},
 	{count64generic, "generic", true},
 }
