@@ -80,10 +80,10 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation funciton in BX, a possibly unaligned input buffer in SI,
-// counters in DI and a remaining length in CX.
+// counters in DI and a remaining length in BP.
 TEXT countsse<>(SB), NOSPLIT, $144-0
-	TESTL CX, CX			// any data to process at all?
-	CMOVLEQ CX, SI			// if not, avoid loading head
+	TESTL BP, BP			// any data to process at all?
+	CMOVLEQ BP, SI			// if not, avoid loading head
 
 	// constants for processing the head
 	MOVQ magic<>+0(SB), X6		// bit position mask
@@ -103,17 +103,17 @@ TEXT countsse<>(SB), NOSPLIT, $144-0
 	MOVOA -16(SI)(AX*1), X7		// load head
 	MOVOU (DX)(AX*1), X5		// load mask of the bytes that are part of the head
 	PAND X5, X7			// and mask out those bytes that are not
-	CMPL AX, CX			// is the head shorter than the buffer?
+	CMPL AX, BP			// is the head shorter than the buffer?
 	JLT norunt
 
 	// buffer is short and does not cross a 16 byte boundary
-	SUBL CX, AX			// number of bytes by which we overshoot the buffer
+	SUBL BP, AX			// number of bytes by which we overshoot the buffer
 	MOVOU (DX)(AX*1), X5		// load mask of bytes that overshoot the buffer
 	PANDN X7, X5			// and clear them
 	MOVOA X5, X7			// move head buffer back to X4
-	MOVL CX, AX			// set up true prefix length
+	MOVL BP, AX			// set up true prefix length
 
-norunt:	SUBL AX, CX			// mark head as accounted for
+norunt:	SUBL AX, BP			// mark head as accounted for
 	ADDL AX, SI			// and advance past the head
 
 	// process head in four increments of 4 bytes
@@ -152,7 +152,7 @@ nohead:	LEAL counts-144+15(SP), DX
 	MOVOA X3, 6*16(DX)
 	MOVOA X4, 7*16(DX)
 
-	SUBL $15*16, CX			// enough data left to process?
+	SUBL $15*16, BP			// enough data left to process?
 	JLT endvec			// also, pre-subtract
 
 	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
@@ -279,7 +279,7 @@ vec:	MOVOA 0*16(SI), X0		// load 240 bytes from buf
 	MOVL $65535, AX			// space left til overflow could occur
 
 have_space:
-	SUBL $15*16, CX			// account for bytes consumed
+	SUBL $15*16, BP			// account for bytes consumed
 	JGE vec
 
 	// constants for processing the tail
@@ -291,24 +291,24 @@ endvec:	MOVQ magic<>+0(SB), X6		// bit position mask
 	PXOR X3, X3
 
 	// process tail, 4 bytes at a time
-	SUBL $8-15*16, CX		// 8 bytes left to process?
+	SUBL $8-15*16, BP		// 8 bytes left to process?
 	JLT tail1
 
 tail8:	COUNT4(X0, X1, (SI))
 	COUNT4(X2, X3, 4(SI))
 	ADDL $8, SI
-	SUBL $8, CX
+	SUBL $8, BP
 	JGE tail8
 
 	// process remaining 0--7 byte
-tail1:	SUBL $-8, CX			// anything left to process?
+tail1:	SUBL $-8, BP			// anything left to process?
 	JLE end
 
 	MOVQ (SI), X5			// load 8 bytes from buffer.  Note that
 					// buffer is aligned to 8 byte here
-	NEGL CX				// form a negative shift amount
+	NEGL BP				// form a negative shift amount
 	LEAL window<>+16(SB), AX
-	MOVQ (AX)(CX*1), X7		// load window mask
+	MOVQ (AX)(BP*1), X7		// load window mask
 	PANDN X5, X7			// and mask out the desired bytes
 
 	// process rest
@@ -446,7 +446,7 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 TEXT ·count8sse2(SB), 0, $0-16
 	MOVL counts+0(FP), DI
 	MOVL buf_base+4(FP), SI		// SI = &buf[0]
-	MOVL buf_len+8(FP), CX		// CX = len(buf)
+	MOVL buf_len+8(FP), BP		// BP = len(buf)
 	MOVL $accum8<>(SB), BX
 	CALL countsse<>(SB)
 	RET
@@ -455,9 +455,9 @@ TEXT ·count8sse2(SB), 0, $0-16
 TEXT ·count16sse2(SB), 0, $0-16
 	MOVL counts+0(FP), DI
 	MOVL buf_base+4(FP), SI		// SI = &buf[0]
-	MOVL buf_len+8(FP), CX		// CX = len(buf)
+	MOVL buf_len+8(FP), BP		// BP = len(buf)
 	MOVL $accum16<>(SB), BX
-	SHLL $1, CX			// count in bytes
+	SHLL $1, BP			// count in bytes
 	CALL countsse<>(SB)
 	RET
 
@@ -465,9 +465,9 @@ TEXT ·count16sse2(SB), 0, $0-16
 TEXT ·count32sse2(SB), 0, $0-16
 	MOVL counts+0(FP), DI
 	MOVL buf_base+4(FP), SI		// SI = &buf[0]
-	MOVL buf_len+8(FP), CX		// CX = len(buf)
+	MOVL buf_len+8(FP), BP		// BP = len(buf)
 	MOVL $accum32<>(SB), BX
-	SHLL $2, CX			// count in bytes
+	SHLL $2, BP			// count in bytes
 	CALL countsse<>(SB)
 	RET
 
@@ -476,8 +476,8 @@ TEXT ·count32sse2(SB), 0, $0-16
 TEXT ·count64sse2(SB), 0, $0-16
 	MOVL counts+0(FP), DI
 	MOVL buf_base+4(FP), SI		// SI = &buf[0]
-	MOVL buf_len+8(FP), CX		// CX = len(buf)
+	MOVL buf_len+8(FP), BP		// BP = len(buf)
 	MOVL $accum64<>(SB), BX
-	SHLL $3, CX			// count in bytes
+	SHLL $3, BP			// count in bytes
 	CALL countsse<>(SB)
 	RET
