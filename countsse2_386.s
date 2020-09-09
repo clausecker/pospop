@@ -326,22 +326,112 @@ end:	PXOR X7, X7			// zero register
 	CALL *BX
 	RET
 
+// zero-extend words in X and Y to dwords, sum them, and move the
+// halves back into X and Y.  Assumes X7 == 0.  Trashes X2 and X3.
+#define FOLDW(X, Y) \
+	MOVOA X, X2 \
+	PUNPCKLWL X7, X \
+	PUNPCKHWL X7, X2 \
+	MOVOA Y, X3 \
+	PUNPCKLWL X7, X3 \
+	PUNPCKHWL X7, Y \
+	PADDL X3, X \
+	PADDL X2, Y
+
+// add dwords in X to (a)*4(DI), trashing X2.
+#define ACCUMQ(a, X) \
+	MOVOU (a)*4(DI), X2 \
+	PADDL X, X2 \
+	MOVOU X2, (a)*4(DI)
+
 // zero-extend words in s*16(DX) to dwords and add to a*4(DI) to (a+7)*4(DI).
-// Assumes X7 == 0 and trashes X0 and X1.
+// Assumes X7 == 0 and trashes X0, X1, and X2.
 #define ACCUMO(a, s) \
 	MOVOA (s)*16(DX), X0 \
 	MOVOA X0, X1 \
 	PUNPCKLWL X7, X0 \
 	PUNPCKHWL X7, X1 \
-	PADDL (a)*4(DI), X0 \
-	PADDL (a+4)*4(DI), X1 \
-	MOVOA X0, (a)*4(DI) \
-	MOVOA X1, (a+4)*4(DI) \
+	ACCUMQ(a, X0) \
+	ACCUMQ(a+4, X1)
 
-// Count64 accumulation function.  Accumulates words X0--X7 into
-// 64 dword counters at (DI).  Trashes X0--X12.
+// Count8 accumulation function.  Accumulates words into
+// 8 dword counters at (DI).  Trashes X0--X7.
+TEXT accum8<>(SB), NOSPLIT, $0-0
+	MOVOA 0*16(DX), X0
+	MOVOA 4*16(DX), X1
+	MOVOA 2*16(DX), X4
+	MOVOA 6*16(DX), X5
+	FOLDW(X0, X1)
+	FOLDW(X4, X5)
+	PADDL X4, X0
+	PADDL X5, X1
+	ACCUMQ(0, X0)
+	ACCUMQ(4, X1)
+	MOVOA 1*16(DX), X0
+	MOVOA 5*16(DX), X1
+	MOVOA 3*16(DX), X4
+	MOVOA 7*16(DX), X5
+	FOLDW(X0, X1)
+	FOLDW(X4, X5)
+	PADDL X4, X0
+	PADDL X5, X1
+	ACCUMQ(0, X0)
+	ACCUMQ(4, X1)
+	RET
+
+// Count16 accumulation function.  Accumulates words into
+// 16 dword counters at (DI).  Trashes X0--X7.
+TEXT accum16<>(SB), NOSPLIT, $0-0
+	MOVOA 0*16(DX), X0
+	MOVOA 4*16(DX), X1
+	MOVOA 2*16(DX), X4
+	MOVOA 6*16(DX), X5
+	FOLDW(X0, X1)
+	FOLDW(X4, X5)
+	PADDL X4, X0
+	PADDL X5, X1
+	ACCUMQ(0, X0)
+	ACCUMQ(4, X1)
+	MOVOA 1*16(DX), X0
+	MOVOA 5*16(DX), X1
+	MOVOA 3*16(DX), X4
+	MOVOA 7*16(DX), X5
+	FOLDW(X0, X1)
+	FOLDW(X4, X5)
+	PADDL X4, X0
+	PADDL X5, X1
+	ACCUMQ(8, X0)
+	ACCUMQ(12, X1)
+	RET
+
+// Count32 accumulation function.  Accumulates words into
+// 32 dword counters at (DI).  Trashes X0--X7.
+TEXT accum32<>(SB), NOSPLIT, $0-0
+	MOVOA 0*16(DX), X0
+	MOVOA 4*16(DX), X1
+	FOLDW(X0, X1)
+	ACCUMQ(0, X0)
+	ACCUMQ(4, X1)
+	MOVOA 1*16(DX), X0
+	MOVOA 5*16(DX), X1
+	FOLDW(X0, X1)
+	ACCUMQ(8, X0)
+	ACCUMQ(12, X1)
+	MOVOA 2*16(DX), X0
+	MOVOA 6*16(DX), X1
+	FOLDW(X0, X1)
+	ACCUMQ(16, X0)
+	ACCUMQ(20, X1)
+	MOVOA 3*16(DX), X0
+	MOVOA 7*16(DX), X1
+	FOLDW(X0, X1)
+	ACCUMQ(24, X0)
+	ACCUMQ(28, X1)
+	RET
+
+// Count64 accumulation function.  Accumulates words into
+// 64 dword counters at (DI).  Trashes X0, X1, and X7.
 TEXT accum64<>(SB), NOSPLIT, $0-0
-	PXOR X7, X7
 	ACCUMO( 0, 0)
 	ACCUMO( 8, 1)
 	ACCUMO(16, 2)
@@ -352,7 +442,6 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 	ACCUMO(56, 7)
 	RET
 
-/*
 // func count8sse2(counts *[8]int, buf []uint8)
 TEXT ·count8sse2(SB), 0, $0-16
 	MOVL counts+0(FP), DI
@@ -381,7 +470,7 @@ TEXT ·count32sse2(SB), 0, $0-16
 	SHLL $2, CX			// count in bytes
 	CALL countsse<>(SB)
 	RET
-*/
+
 
 // func count64sse2(counts *[64]int, buf []uint64)
 TEXT ·count64sse2(SB), 0, $0-16
