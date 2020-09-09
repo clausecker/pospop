@@ -223,12 +223,12 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VPUNPCKLBW Y7, Y0, Y4
 	VPUNPCKHBW Y7, Y0, Y5
 	VPUNPCKLBW Y7, Y1, Y6
-	VPUNPCKHBW Y7, Y1, Y7
+	VPUNPCKHBW Y7, Y1, Y1
 
 	VPADDW Y4, Y8, Y8
 	VPADDW Y5, Y9, Y9
 	VPADDW Y6, Y10, Y10
-	VPADDW Y7, Y11, Y11
+	VPADDW Y1, Y11, Y11
 
 	SUBL $15*4, AX			// account for possible overflow
 	CMPL AX, $15*4			// enough space left in the counters?
@@ -306,6 +306,7 @@ end:	VPXOR Y7, Y7, Y7
 	VPADDW Y7, Y11, Y11
 
 	// and perform a final accumulation
+	VPXOR Y7, Y7, Y7
 	CALL *BX
 	VZEROUPPER
 	RET
@@ -316,16 +317,16 @@ end:	VPXOR Y7, Y7, Y7
 // Y8 contains  4- 7, 20-23
 // Y1 contains  8-11, 24-27
 // Y9 contains 12-15, 28-31
-// Assumes Y12 == 0.
+// Assumes Y7 == 0.
 #define FOLD32 \
-	VPUNPCKLWD Y12, Y8, Y0		\
-	VPUNPCKHWD Y12, Y8, Y8		\
-	VPUNPCKLWD Y12, Y9, Y1		\
-	VPUNPCKHWD Y12, Y9, Y9		\
-	VPUNPCKLWD Y12, Y10, Y2		\
-	VPUNPCKHWD Y12, Y10, Y10	\
-	VPUNPCKLWD Y12, Y11, Y3		\
-	VPUNPCKHWD Y12, Y11, Y11	\
+	VPUNPCKLWD Y7, Y8, Y0		\
+	VPUNPCKHWD Y7, Y8, Y8		\
+	VPUNPCKLWD Y7, Y9, Y1		\
+	VPUNPCKHWD Y7, Y9, Y9		\
+	VPUNPCKLWD Y7, Y10, Y2		\
+	VPUNPCKHWD Y7, Y10, Y10	\
+	VPUNPCKLWD Y7, Y11, Y3		\
+	VPUNPCKHWD Y7, Y11, Y11	\
 	VPADDD Y0, Y2, Y0		\
 	VPADDD Y8, Y10, Y8		\
 	VPADDD Y1, Y3, Y1		\
@@ -333,11 +334,11 @@ end:	VPXOR Y7, Y7, Y7
 
 // zero-extend dwords in Y trashing Y and Z.  Add the low
 // half dwords to a*8(DI) and the high half to b*8(DI).
-// Assumes Y12 == 0
+// Assumes Y7 == 0
 #define ACCUM(a, b, Y, Z) \
 	VPERMQ $0xd8, Y, Y \
-	VPUNPCKHDQ Y12, Y, Z \
-	VPUNPCKLDQ Y12, Y, Y \
+	VPUNPCKHDQ Y7, Y, Z \
+	VPUNPCKLDQ Y7, Y, Y \
 	VPADDQ (a)*8(DI), Y, Y \
 	VPADDQ (b)*8(DI), Z, Z \
 	VMOVDQU Y, (a)*8(DI) \
@@ -346,7 +347,6 @@ end:	VPXOR Y7, Y7, Y7
 // Count16 accumulation function.  Accumulates words Y8--Y11
 // into 16 qword counters at (DI).  Trashes Y0--Y12.
 TEXT accum16<>(SB), NOSPLIT, $0-0
-	VPXOR Y12, Y12, Y12
 	FOLD32
 
 	// fold over upper 16 bit over lower 32 counters
@@ -366,7 +366,6 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 // Count32 accumulation function.  Accumulates words Y8--Y11
 // int 32 qword counters at (DI).  Trashes Y0--Y12
 TEXT accum32<>(SB), NOSPLIT, $0-0
-	VPXOR Y12, Y12, Y12
 	FOLD32
 
 	ACCUM( 0, 16, Y0, Y2)
@@ -379,15 +378,14 @@ TEXT accum32<>(SB), NOSPLIT, $0-0
 // accumulate the 16 counters in Y into k*8(DI) to (k+15)*8(DI)
 // trashes Y0--Y3.  Assumes Y12 == 0
 #define ACCUM64(k, Y) \
-	VPUNPCKLWD Y12, Y, Y0 \
-	VPUNPCKHWD Y12, Y, Y1 \
+	VPUNPCKLWD Y7, Y, Y0 \
+	VPUNPCKHWD Y7, Y, Y1 \
 	ACCUM(k, k+16, Y0, Y2) \
 	ACCUM(k+4, k+20, Y1, Y2)
 
 // Count64 accumulation function.  Accumulates words Y8--Y11
 // into 64 qword counters at (DI).  Trashes Y0--Y12.
 TEXT accum64<>(SB), NOSPLIT, $0-0
-	VPXOR Y12, Y12, Y12
 	ACCUM64(0, Y8)
 	ACCUM64(8, Y9)
 	ACCUM64(32, Y10)

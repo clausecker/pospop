@@ -399,7 +399,6 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 // Count32 accumulation function.  Accumulates words X0--X7 into
 // 32 qword counters at (DI).  Trashes X0--X12.
 TEXT accum32<>(SB), NOSPLIT, $0-0
-	PXOR X7, X7
 	FOLDW(X8, X12)
 	ACCUMQ(0, X8)
 	ACCUMQ(4, X12)
@@ -417,7 +416,6 @@ TEXT accum32<>(SB), NOSPLIT, $0-0
 // Count64 accumulation function.  Accumulates words X0--X7 into
 // 64 qword counters at (DI).  Trashes X0--X12.
 TEXT accum64<>(SB), NOSPLIT, $0-0
-	PXOR X7, X7
 	ACCUMO(0, X8)
 	ACCUMO(8, X9)
 	ACCUMO(16, X10)
