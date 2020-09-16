@@ -366,6 +366,19 @@ end:	VPXOR Y7, Y7, Y7
 	VMOVDQU Y, (a)*8(DI) \
 	VMOVDQU Z, (b)*8(DI)
 
+// Count8 accumulation function.  Accumulates words Y8--Y11
+// into 8 qword counters at (DI).  Trashes Y0--Y12.
+TEXT accum8<>(SB), NOSPLIT, $0-0
+	FOLD32
+
+	VPADDD Y1, Y0, Y0		// 0- 3,  0- 3
+	VPADDD Y9, Y8, Y8		// 4- 7,  4- 7
+	VPERM2I128 $0x20, Y8, Y0, Y1
+	VPERM2I128 $0x31, Y8, Y0, Y2
+	VPADDD Y2, Y1, Y0		// 0- 3,  4- 7
+	ACCUM(0, 4, Y0, Y1)
+	RET
+
 // Count16 accumulation function.  Accumulates words Y8--Y11
 // into 16 qword counters at (DI).  Trashes Y0--Y12.
 TEXT accum16<>(SB), NOSPLIT, $0-0
@@ -412,6 +425,15 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 	ACCUM64(8, Y9)
 	ACCUM64(32, Y10)
 	ACCUM64(40, Y11)
+	RET
+
+// func count8avx2(counts *[8]int, buf []uint8)
+TEXT ·count8avx2(SB), 0, $0-32
+	MOVQ counts+0(FP), DI
+	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
+	MOVQ buf_len+16(FP), CX		// CX = len(buf)
+	MOVQ $accum8<>(SB), BX
+	CALL countavx<>(SB)
 	RET
 
 // func count16avx2(counts *[16]int, buf []uint16)
