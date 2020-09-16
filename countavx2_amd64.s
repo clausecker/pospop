@@ -13,10 +13,9 @@ DATA magic<>+ 8(SB)/8, $0x0101010101010101
 DATA magic<>+16(SB)/8, $0x0202020202020202
 DATA magic<>+24(SB)/8, $0x0303030303030303
 DATA magic<>+32(SB)/8, $0x8040201008040201
-DATA magic<>+40(SB)/4, $0x0000cccc
-DATA magic<>+44(SB)/4, $0x00aa00aa
-DATA magic<>+48(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $52
+DATA magic<>+40(SB)/4, $0x11111111
+DATA magic<>+44(SB)/4, $0x0f0f0f0f
+GLOBL magic<>(SB), RODATA|NOPTR, $48
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't seem to be
 // a good way to do this with less memory wasted.
@@ -37,23 +36,6 @@ GLOBL window<>(SB), RODATA|NOPTR, $64
 	VPAND A, C, B \
 	VPXOR A, C, A \
 	VPOR  B, D, B
-
-// pseudo-transpose the 4x8 bit matrices in Y.  Transforms
-// Y = D7D6D5D4 D3D2D1D0 C7C6C5C4 C3C2C1C0 B7B6B5B4 B3B2B1B0 A7A6A5A4 A3A2A1A0
-// to  D7C7B7A7 D3C3B3A3 D6C6B6A6 D2C2B2A2 D5C5B5A5 D1C1B1A1 D4C4B4A4 D0C0B0A0
-// requires magic constants 0x00aa00aa in Y14 and 0x0000cccc in Y15
-#define TRANSPOSE(Y) \
-	BITPERMUTE(Y, Y14, $7) \
-	BITPERMUTE(Y, Y15, $14)
-
-// swap the bits of Y selected by mask M with those S bits to the left
-#define BITPERMUTE(Y, M, S) \
-	VPSRLD S, Y, Y12 \
-	VPXOR Y, Y12, Y12 \
-	VPAND Y12, M, Y12 \
-	VPXOR Y, Y12, Y \
-	VPSLLD S, Y12, Y12 \
-	VPXOR Y, Y12, Y
 
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
@@ -122,35 +104,34 @@ nohead:	VPUNPCKLBW Y7, Y0, Y8		// 0-7, 16-23
 	SUBQ $15*32, CX			// enough data left to process?
 	JLT endvec			// also, pre-subtract
 
-	VPBROADCASTD magic<>+40(SB), Y15 // 0x0000cccc for transpose
-	VPBROADCASTD magic<>+44(SB), Y14 // 0x00aa00aa for transpose
-	VPBROADCASTD magic<>+48(SB), Y13 // 0x0f0f0f0f for deinterleaving the nibbles
+	VPBROADCASTD magic<>+40(SB), Y15 // 0x11111111 for transposition
+	VPBROADCASTD magic<>+44(SB), Y14 // 0x0f0f0f0f for deinterleaving the nibbles
 
 	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
 
-vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
-	VMOVDQU 1*32(SI), Y1		// and sum them into Y3:Y2:Y1:Y0
-	VMOVDQU 2*32(SI), Y4
-	VMOVDQU 3*32(SI), Y2
-	VMOVDQU 4*32(SI), Y3
-	VMOVDQU 5*32(SI), Y5
-	VMOVDQU 6*32(SI), Y6
+vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
+	VMOVDQA 1*32(SI), Y1		// and sum them into Y3:Y2:Y1:Y0
+	VMOVDQA 2*32(SI), Y4
+	VMOVDQA 3*32(SI), Y2
+	VMOVDQA 4*32(SI), Y3
+	VMOVDQA 5*32(SI), Y5
+	VMOVDQA 6*32(SI), Y6
 	CSA(Y0, Y1, Y4, Y7)
-	VMOVDQU 7*32(SI), Y4
+	VMOVDQA 7*32(SI), Y4
 	CSA(Y3, Y2, Y5, Y7)
-	VMOVDQU 8*32(SI), Y5
+	VMOVDQA 8*32(SI), Y5
 	CSA(Y0, Y3, Y6, Y7)
-	VMOVDQU 9*32(SI), Y6
+	VMOVDQA 9*32(SI), Y6
 	CSA(Y1, Y2, Y3, Y7)
-	VMOVDQU 10*32(SI), Y3
+	VMOVDQA 10*32(SI), Y3
 	CSA(Y0, Y4, Y5, Y7)
-	VMOVDQU 11*32(SI), Y5
+	VMOVDQA 11*32(SI), Y5
 	CSA(Y0, Y3, Y6, Y7)
-	VMOVDQU 12*32(SI), Y6
+	VMOVDQA 12*32(SI), Y6
 	CSA(Y1, Y3, Y4, Y7)
-	VMOVDQU 13*32(SI), Y4
+	VMOVDQA 13*32(SI), Y4
 	CSA(Y0, Y5, Y6, Y7)
-	VMOVDQU 14*32(SI), Y6
+	VMOVDQA 14*32(SI), Y6
 	CSA(Y0, Y4, Y6, Y7)
 	CSA(Y1, Y4, Y5, Y7)
 	CSA(Y2, Y3, Y4, Y7)
@@ -166,57 +147,98 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	PREFETCHT0 (D+12)*32(SI)
 	PREFETCHT0 (D+14)*32(SI)
 
-	// shuffle registers such that Y3:Y2:Y1:Y0 contains dwords
-	// of the form 0xDDCCBBAA
-	VPUNPCKLBW Y1, Y0, Y4		// Y4 = BBAABBAA (lo)
-	VPUNPCKHBW Y1, Y0, Y5		// Y5 = BBAABBAA (hi)
-	VPUNPCKLBW Y3, Y2, Y6		// Y6 = DDCCDDCC (lo)
-	VPUNPCKHBW Y3, Y2, Y7		// Y7 = DDCCDDCC (hi)
-	VPUNPCKLWD Y6, Y4, Y0		// Y0 = DDCCBBAA (0)
-	VPUNPCKHWD Y6, Y4, Y1		// Y1 = DDCCBBAA (1)
-	VPUNPCKLWD Y7, Y5, Y2		// Y2 = DDCCBBAA (2)
-	VPUNPCKHWD Y7, Y5, Y3		// Y3 = DDCCBBAA (3)
+	// group nibbles in V0, V1, V2, and V3 into V4, V5, V6, and V7
+	VPAND Y0, Y15, Y4
+	VPSRLD $1, Y0, Y0
+	VPAND Y0, Y15, Y5
+	VPSRLD $1, Y0, Y0
+	VPAND Y0, Y15, Y6
+	VPSRLD $1, Y0, Y0
+	VPAND Y0, Y15, Y7
 
-	// pseudo-transpose the 8x4 bit matrix in each dword
-	TRANSPOSE(Y0)
-	TRANSPOSE(Y1)
-	TRANSPOSE(Y2)
-	TRANSPOSE(Y3)
+	VPSLLD $1, Y15, Y13		// 0x22222222
+	VPSLLD $1, Y1, Y12
+	VPAND Y12, Y13, Y12
+	VPOR Y12, Y4, Y4
+	VPAND Y1, Y13, Y12
+	VPSRLD $1, Y1, Y1
+	VPOR Y12, Y5, Y5
+	VPAND Y1, Y13, Y12
+	VPSRLD $1, Y1, Y1
+	VPOR Y12, Y6, Y6
+	VPAND Y1, Y13, Y12
+	VPOR Y12, Y7, Y7
 
-	// pull out low nibbles from matrices
-	VPAND Y0, Y13, Y4
-	VPSRLD $4, Y0, Y0
-	VPAND Y1, Y13, Y5
-	VPSRLD $4, Y1, Y1
-	VPAND Y2, Y13, Y6
-	VPSRLD $4, Y2, Y2
-	VPAND Y3, Y13, Y7
-	VPSRLD $4, Y3, Y3
+	VPSLLD $2, Y15, Y13		// 0x44444444
+	VPSLLD $2, Y2, Y12
+	VPAND Y12, Y13, Y12
+	VPOR Y12, Y4, Y4
+	VPSLLD $1, Y2, Y12
+	VPAND Y12, Y13, Y12
+	VPOR Y12, Y5, Y5
+	VPAND Y2, Y13, Y12
+	VPSRLD $1, Y2, Y2
+	VPOR Y12, Y6, Y6
+	VPAND Y2, Y13, Y12
+	VPOR Y12, Y7, Y7
 
-	// sum up low nibbles into Y4
-	VPADDB Y4, Y6, Y6
-	VPADDB Y5, Y7, Y7
-	VPERM2I128 $0x20, Y7, Y6, Y4
-	VPERM2I128 $0x31, Y7, Y6, Y5
-	VPADDB Y5, Y4, Y4
+	VPSLLD $3, Y15, Y13		// 0x88888888
+	VPSLLD $3, Y3, Y12
+	VPAND Y12, Y13, Y12
+	VPOR Y12, Y4, Y4
+	VPSLLD $2, Y3, Y12
+	VPAND Y12, Y13, Y12
+	VPOR Y12, Y5, Y5
+	VPSLLD $1, Y3, Y12
+	VPAND Y12, Y13, Y12
+	VPOR Y12, Y6, Y6
+	VPAND Y3, Y13, Y12
+	VPOR Y12, Y7, Y7
 
-	// pull out high nibbles from matrices
-	VPAND Y0, Y13, Y0
-	VPAND Y1, Y13, Y1
-	VPAND Y2, Y13, Y2
-	VPAND Y3, Y13, Y3
+	// dword contents in nibbles:
+	// Y4 = c840c840, Y5 = d951d951, Y6 = ea62ea62, Y6 = fb73fb73
 
-	// sum up high nibbles into Y5
-	VPADDB Y0, Y2, Y2
-	VPADDB Y1, Y3, Y3
-	VPERM2I128 $0x20, Y3, Y2, Y0
-	VPERM2I128 $0x31, Y3, Y2, Y1
-	VPADDB Y1, Y0, Y5
+	// pre-shuffle nibbles
+	VPUNPCKLBW Y5, Y4, Y0		// Y0 = d9c85140         (3:2:1:0)
+	VPUNPCKHBW Y5, Y4, Y1		// Y1 = d9c85140	 (7:6:5:4)
+	VPUNPCKLBW Y7, Y6, Y2		// Y2 = fbea7362	 (3:2:1:0)
+	VPUNPCKHBW Y7, Y6, Y3		// Y3 = fbea7362	 (7:6:5:4)
+	VPUNPCKLWD Y2, Y0, Y4		// Y4 = fbead9c873625140  (1:0)
+	VPUNPCKHWD Y2, Y0, Y5		// Y5 = fbead9c873625140  (3:2)
+	VPUNPCKLWD Y3, Y1, Y6		// Y6 = fbead9c873625140  (5:4)
+	VPUNPCKHWD Y3, Y1, Y7		// Y7 = fbead9c873625140  (7:6)
 
-	VPUNPCKLDQ Y5, Y4, Y2
-	VPUNPCKHDQ Y5, Y4, Y3
-	VPERM2I128 $0x20, Y3, Y2, Y0
-	VPERM2I128 $0x31, Y3, Y2, Y1
+	// pull out high and low nibbles
+	VPAND Y4, Y14, Y0
+	VPSRLD $4, Y4, Y4
+	VPAND Y4, Y14, Y4
+	VPAND Y5, Y14, Y1
+	VPSRLD $4, Y5, Y5
+	VPAND Y5, Y14, Y5
+	VPAND Y6, Y14, Y2
+	VPSRLD $4, Y6, Y6
+	VPAND Y6, Y14, Y6
+	VPAND Y7, Y14, Y3
+	VPSRLD $4, Y7, Y7
+	VPAND Y7, Y14, Y7
+
+	// reduce common values
+	VPADDB Y2, Y0, Y0		// Y0 = ba98:3210:ba98:3210 (1:0)
+	VPADDB Y3, Y1, Y1		// Y1 = ba98:3210:ba98:3210 (3:2)
+	VPADDB Y6, Y4, Y2		// Y2 = fedc:7654:fedc:7654 (1:0)
+	VPADDB Y7, Y5, Y3		// Y3 = fedc:7654:fedc:7654 (3:2)
+
+	// shuffle dwords and group them
+	VPUNPCKLDQ Y2, Y0, Y4
+	VPUNPCKHDQ Y2, Y0, Y5
+	VPUNPCKLDQ Y3, Y1, Y6
+	VPUNPCKHDQ Y3, Y1, Y7
+	VPERM2I128 $0x20, Y5, Y4, Y0
+	VPERM2I128 $0x31, Y5, Y4, Y2
+	VPERM2I128 $0x20, Y7, Y6, Y1
+	VPERM2I128 $0x31, Y7, Y6, Y3
+	VPADDB Y2, Y0, Y0		// Y0 = fedc:ba98:7654:3210 (1:0)
+	VPADDB Y3, Y1, Y1		// Y1 = fedc:ba98:7654:3210 (3:2)
 
 	// zero-extend and add to Y8--Y11
 	VPXOR Y7, Y7, Y7
@@ -274,11 +296,11 @@ tail8:	VPBROADCASTD 0(SI), Y4
 tail1:	SUBL $-8, CX			// anything left to process?
 	JLE end
 
-	MOVQ (SI), X5			// load 8 byte from buffer.  This is ok
+	VMOVQ (SI), X5			// load 8 byte from buffer.  This is ok
 					// as buffer is aligned to 8 byte here
 	MOVQ $window<>+32(SB), AX	// load window address
-	NEGQ CX				// form a negative shift amount
-	MOVQ (AX)(CX*1), X6		// load window mask
+	SUBQ CX, AX			// adjust mask pointer
+	VMOVQ (AX), X6			// load window mask
 	VPANDN X5, X6, X5		// and mask out the desired bytes
 
 	VPBROADCASTD X5, Y4
@@ -319,17 +341,17 @@ end:	VPXOR Y7, Y7, Y7
 // Y9 contains 12-15, 28-31
 // Assumes Y7 == 0.
 #define FOLD32 \
-	VPUNPCKLWD Y7, Y8, Y0		\
-	VPUNPCKHWD Y7, Y8, Y8		\
-	VPUNPCKLWD Y7, Y9, Y1		\
-	VPUNPCKHWD Y7, Y9, Y9		\
-	VPUNPCKLWD Y7, Y10, Y2		\
+	VPUNPCKLWD Y7, Y8, Y0	\
+	VPUNPCKHWD Y7, Y8, Y8	\
+	VPUNPCKLWD Y7, Y9, Y1	\
+	VPUNPCKHWD Y7, Y9, Y9	\
+	VPUNPCKLWD Y7, Y10, Y2	\
 	VPUNPCKHWD Y7, Y10, Y10	\
-	VPUNPCKLWD Y7, Y11, Y3		\
+	VPUNPCKLWD Y7, Y11, Y3	\
 	VPUNPCKHWD Y7, Y11, Y11	\
-	VPADDD Y0, Y2, Y0		\
-	VPADDD Y8, Y10, Y8		\
-	VPADDD Y1, Y3, Y1		\
+	VPADDD Y0, Y2, Y0	\
+	VPADDD Y8, Y10, Y8	\
+	VPADDD Y1, Y3, Y1	\
 	VPADDD Y9, Y11, Y9
 
 // zero-extend dwords in Y trashing Y and Z.  Add the low
