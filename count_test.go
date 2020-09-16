@@ -28,6 +28,17 @@ func randomCounts(counts []int) {
 	}
 }
 
+// compute the difference in length between two equally long integers slices.
+func countDiff(a []int, b []int) []int {
+	res := make([]int, len(a))
+
+	for i := range a {
+		res[i] = b[i] - a[i]
+	}
+
+	return res
+}
+
 // test the correctness of a count8 implementation
 func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 	for _, len := range testLengths {
@@ -44,7 +55,7 @@ func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 		count8safe(&refCounts, buf)
 
 		if counts != refCounts {
-			t.Errorf("length %d: counts don't match", len)
+			t.Errorf("length %d: counts don't match: %v\n", len, countDiff(counts[:], refCounts[:]))
 		}
 	}
 }
@@ -65,7 +76,7 @@ func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 		count16safe(&refCounts, buf)
 
 		if counts != refCounts {
-			t.Errorf("length %d: counts don't match", len)
+			t.Errorf("length %d: counts don't match: %v\n", len, countDiff(counts[:], refCounts[:]))
 		}
 	}
 }
@@ -86,7 +97,7 @@ func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 		count32safe(&refCounts, buf)
 
 		if counts != refCounts {
-			t.Errorf("length %d: counts don't match", len)
+			t.Errorf("length %d: counts don't match: %v\n", len, countDiff(counts[:], refCounts[:]))
 		}
 	}
 }
@@ -107,7 +118,7 @@ func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 		count64safe(&refCounts, buf)
 
 		if counts != refCounts {
-			t.Errorf("length %d: counts don't match", len)
+			t.Errorf("length %d: counts don't match: %v\n", len, countDiff(counts[:], refCounts[:]))
 		}
 	}
 }

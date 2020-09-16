@@ -99,7 +99,7 @@ TEXT countsse<>(SB), NOSPLIT, $144-0
 	JEQ nohead			// if source buffer is aligned, skip head processing
 	MOVL $16, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
-	LEAL window<>(SB), DX
+	MOVL $window<>(SB), DX
 	MOVOA -16(SI)(AX*1), X7		// load head
 	MOVOU (DX)(AX*1), X5		// load mask of the bytes that are part of the head
 	PAND X5, X7			// and mask out those bytes that are not
@@ -126,7 +126,7 @@ norunt:	SUBL AX, BP			// mark head as accounted for
 	COUNT4(X2, X3, X7)
 
 	// produce 16 byte aligned pointer to counter vector in DX
-nohead:	LEAL counts-144+15(SP), DX
+nohead:	MOVL $counts-144+15(SP), DX
 	ANDL $~15, DX			// align to 16 bytes
 
 	// initialise counters in (DX) to what we have
@@ -306,9 +306,9 @@ tail1:	SUBL $-8, BP			// anything left to process?
 
 	MOVQ (SI), X5			// load 8 bytes from buffer.  Note that
 					// buffer is aligned to 8 byte here
-	NEGL BP				// form a negative shift amount
-	LEAL window<>+16(SB), AX
-	MOVQ (AX)(BP*1), X7		// load window mask
+	MOVL $window<>+16(SB), AX	// load window address
+	SUBL BP, AX			// adjust mask pointer
+	MOVQ (AX), X7			// load window mask
 	PANDN X5, X7			// and mask out the desired bytes
 
 	// process rest

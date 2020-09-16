@@ -99,7 +99,7 @@ TEXT countsse<>(SB), NOSPLIT, $0-0
 	MOVL $16, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
 	MOVOA -16(SI)(AX*1), X3		// load head
-	LEAQ window<>(SB), DX		// load window mask base pointer
+	MOVQ $window<>(SB), DX		// load window mask base pointer
 	MOVOU (DX)(AX*1), X5		// load mask of the bytes that are part of the head
 	PAND X5, X3			// and mask out those bytes that are not
 	CMPQ AX, CX			// is the head shorter than the buffer?
@@ -292,8 +292,8 @@ tail1:	SUBL $-8, CX			// anything left to process?
 	MOVQ (SI), X5			// load 8 bytes from buffer.  Note that
 					// buffer is aligned to 8 byte here
 	MOVQ $window<>+16(SB), AX	// load window address
-	NEGQ CX				// form a negative shift amount
-	MOVQ (AX)(CX*1), X7		// load window mask
+	SUBQ CX, AX			// adjust mask
+	MOVQ (AX), X7			// load window mask
 	PANDN X5, X7			// and mask out the desired bytes
 
 	// process rest

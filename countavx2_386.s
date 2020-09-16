@@ -75,7 +75,7 @@ TEXT countavx<>(SB), NOSPLIT, $160-0
 	MOVL $32, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
 	VMOVDQA -32(SI)(AX*1), Y7	// load head
-	LEAL window<>(SB), DX		// load window mask base pointer
+	MOVL $window<>(SB), DX		// load window mask base pointer
 	VMOVDQU (DX)(AX*1), Y5		// load mask of the bytes that are part of the head
 	VPAND Y5, Y7, Y7		// and mask out those bytes that are not
 	CMPL AX, BP			// is the head shorter than the buffer?
@@ -113,7 +113,7 @@ head:	VPBROADCASTD scratch-160+0(SP)(DX*8), Y4
 	JLT head
 
 	// produce 16 byte aligned point to counter vector in DX
-nohead:	LEAL counts-160+31(SP), DX
+nohead:	MOVL $counts-160+31(SP), DX
 	ANDL $~31, DX			// align to 32 bytes
 
 	// initialise counters to what we have
@@ -332,8 +332,8 @@ tail1:	SUBL $-8, BP			// anything left to process?
 	BYTE $0x7e
 	BYTE $0x2e
 	MOVL $window<>+32(SB), AX	// load window address
-	NEGL BP				// form a negative shift amount
-	VMOVQ (AX)(BP*1), X6		// load window mask
+	SUBL BP, AX			// adjust mask pointer
+	VMOVQ (AX), X6			// load window mask
 	VPANDN X5, X6, X5		// and mask out the desired bytes
 
 	VPBROADCASTD X5, Y4
