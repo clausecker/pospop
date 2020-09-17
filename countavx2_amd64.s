@@ -13,9 +13,10 @@ DATA magic<>+ 8(SB)/8, $0x0101010101010101
 DATA magic<>+16(SB)/8, $0x0202020202020202
 DATA magic<>+24(SB)/8, $0x0303030303030303
 DATA magic<>+32(SB)/8, $0x8040201008040201
-DATA magic<>+40(SB)/4, $0x11111111
-DATA magic<>+44(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $48
+DATA magic<>+40(SB)/4, $0x55555555
+DATA magic<>+44(SB)/4, $0x33333333
+DATA magic<>+48(SB)/4, $0x0f0f0f0f
+GLOBL magic<>(SB), RODATA|NOPTR, $52
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't seem to be
 // a good way to do this with less memory wasted.
@@ -104,8 +105,9 @@ nohead:	VPUNPCKLBW Y7, Y0, Y8		// 0-7, 16-23
 	SUBQ $15*32, CX			// enough data left to process?
 	JLT endvec			// also, pre-subtract
 
-	VPBROADCASTD magic<>+40(SB), Y15 // 0x11111111 for transposition
-	VPBROADCASTD magic<>+44(SB), Y14 // 0x0f0f0f0f for deinterleaving the nibbles
+	VPBROADCASTD magic<>+40(SB), Y15 // 0x55555555 for transposition
+	VPBROADCASTD magic<>+44(SB), Y13 // 0x33333333 for transposition
+	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f for deinterleaving the nibbles
 
 	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
 
@@ -148,65 +150,55 @@ vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
 	PREFETCHT0 (D+14)*32(SI)
 
 	// group nibbles in Y0, Y1, Y2, and Y3 into Y4, Y5, Y6, and Y7
+	VPADDD Y15, Y15, Y12		// 0xaaaaaaaa
+
+	VPAND Y1, Y15, Y5
+	VPADDD Y5, Y5, Y5
+	VPAND Y3, Y15, Y7
+	VPADDD Y7, Y7, Y7
 	VPAND Y0, Y15, Y4
-	VPSRLD $1, Y0, Y0
-	VPAND Y0, Y15, Y5
-	VPSRLD $1, Y0, Y0
-	VPAND Y0, Y15, Y6
-	VPSRLD $1, Y0, Y0
-	VPAND Y0, Y15, Y7
+	VPAND Y2, Y15, Y6
+	VPOR Y4, Y5, Y4			// Y4 = eca86420 (low crumbs)
+	VPOR Y6, Y7, Y5			// Y5 = eca86420 (high crumbs)
 
-	VPADDD Y15, Y15, Y13		// 0x22222222
-	VPADDD Y1, Y1, Y12
-	VPAND Y12, Y13, Y12
-	VPOR Y12, Y4, Y4
-	VPAND Y1, Y13, Y12
-	VPSRLD $1, Y1, Y1
-	VPOR Y12, Y5, Y5
-	VPAND Y1, Y13, Y12
-	VPSRLD $1, Y1, Y1
-	VPOR Y12, Y6, Y6
-	VPAND Y1, Y13, Y12
-	VPOR Y12, Y7, Y7
-
-	VPADDD Y13, Y13, Y13		// 0x44444444
-	VPSLLD $2, Y2, Y12
-	VPAND Y12, Y13, Y12
-	VPOR Y12, Y4, Y4
-	VPADDD Y2, Y2, Y12
-	VPAND Y12, Y13, Y12
-	VPOR Y12, Y5, Y5
-	VPAND Y2, Y13, Y12
+	VPAND Y0, Y12, Y0
+	VPSRLD $1, Y0, Y0
+	VPAND Y2, Y12, Y2
 	VPSRLD $1, Y2, Y2
-	VPOR Y12, Y6, Y6
-	VPAND Y2, Y13, Y12
-	VPOR Y12, Y7, Y7
+	VPAND Y1, Y12, Y1
+	VPAND Y3, Y12, Y3
+	VPOR Y0, Y1, Y6			// Y6 = fdb97531 (low crumbs)
+	VPOR Y2, Y3, Y7			// Y7 = fdb97531 (high crumbs)
 
-	VPADDD Y13, Y13, Y13		// 0x88888888
-	VPSLLD $3, Y3, Y12
-	VPAND Y12, Y13, Y12
-	VPOR Y12, Y4, Y4
-	VPSLLD $2, Y3, Y12
-	VPAND Y12, Y13, Y12
-	VPOR Y12, Y5, Y5
-	VPADDD Y3, Y3, Y12
-	VPAND Y12, Y13, Y12
-	VPOR Y12, Y6, Y6
-	VPAND Y3, Y13, Y12
-	VPOR Y12, Y7, Y7
+	VPSLLD $2, Y13, Y12		// 0xcccccccc
 
-	// dword contents in nibbles:
-	// Y4 = c840c840, Y5 = d951d951, Y6 = ea62ea62, Y6 = fb73fb73
+	VPAND Y5, Y13, Y1
+	VPSLLD $2, Y1, Y1
+	VPAND Y7, Y13, Y3
+	VPSLLD $2, Y3, Y3
+	VPAND Y4, Y13, Y0
+	VPAND Y6, Y13, Y2
+	VPOR Y0, Y1, Y0			// Y0 = c840
+	VPOR Y2, Y3, Y1			// Y1 = d951
+
+	VPAND Y4, Y12, Y4
+	VPSRLD $2, Y4, Y4
+	VPAND Y6, Y12, Y6
+	VPSRLD $2, Y6, Y6
+	VPAND Y5, Y12, Y5
+	VPAND Y7, Y12, Y7
+	VPOR Y4, Y5, Y2			// Y2 = ea62
+	VPOR Y6, Y7, Y3			// Y3 = fb73
 
 	// pre-shuffle nibbles
-	VPUNPCKLBW Y5, Y4, Y0		// Y0 = d9c85140         (3:2:1:0)
-	VPUNPCKHBW Y5, Y4, Y1		// Y1 = d9c85140	 (7:6:5:4)
-	VPUNPCKLBW Y7, Y6, Y2		// Y2 = fbea7362	 (3:2:1:0)
-	VPUNPCKHBW Y7, Y6, Y3		// Y3 = fbea7362	 (7:6:5:4)
-	VPUNPCKLWD Y2, Y0, Y4		// Y4 = fbead9c873625140  (1:0)
-	VPUNPCKHWD Y2, Y0, Y5		// Y5 = fbead9c873625140  (3:2)
-	VPUNPCKLWD Y3, Y1, Y6		// Y6 = fbead9c873625140  (5:4)
-	VPUNPCKHWD Y3, Y1, Y7		// Y7 = fbead9c873625140  (7:6)
+	VPUNPCKLBW Y1, Y0, Y5		// Y5 = d9c85140         (3:2:1:0)
+	VPUNPCKHBW Y1, Y0, Y0		// Y0 = d9c85140         (7:6:5:4)
+	VPUNPCKLBW Y3, Y2, Y6		// Y6 = fbea7362         (3:2:1:0)
+	VPUNPCKHBW Y3, Y2, Y1		// Y1 = fbea7362         (3:2:1:0)
+	VPUNPCKLWD Y6, Y5, Y4		// Y4 = fbead9c873625140 (1:0)
+	VPUNPCKHWD Y6, Y5, Y5		// Y5 = fbead9c873625140 (3:2)
+	VPUNPCKLWD Y1, Y0, Y6		// Y6 = fbead9c873624150 (5:4)
+	VPUNPCKHWD Y1, Y0, Y7		// Y7 = fbead9c873624150 (7:6)
 
 	// pull out high and low nibbles
 	VPAND Y4, Y14, Y0
