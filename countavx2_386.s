@@ -13,9 +13,10 @@ DATA magic<>+ 8(SB)/8, $0x0101010101010101
 DATA magic<>+16(SB)/8, $0x0202020202020202
 DATA magic<>+24(SB)/8, $0x0303030303030303
 DATA magic<>+32(SB)/8, $0x8040201008040201
-DATA magic<>+40(SB)/4, $0x11111111
-DATA magic<>+44(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $48
+DATA magic<>+40(SB)/4, $0x55555555
+DATA magic<>+44(SB)/4, $0x33333333
+DATA magic<>+48(SB)/4, $0x0f0f0f0f
+GLOBL magic<>(SB), RODATA|NOPTR, $52
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't seem to be
 // a good way to do this with less memory wasted.
@@ -40,7 +41,7 @@ GLOBL window<>(SB), RODATA|NOPTR, $64
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and a remaining length in BP.
-TEXT countavx<>(SB), NOSPLIT, $192-0
+TEXT countavx<>(SB), NOSPLIT, $160-0
 	TESTL BP, BP			// any data to process at all?
 	CMOVLEQ BP, SI			// if not, avoid loading head
 
@@ -142,7 +143,8 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	CSA(Y2, Y3, Y4, Y7)
 
 	// load magic constants
-	VPBROADCASTD magic<>+40(SB), Y7	// 0x11111111 for grouping nibbles
+	VPBROADCASTD magic<>+40(SB), Y7	// 0x55555555
+	VPADDD Y7, Y7, Y6		// 0xaaaaaaaa
 
 	ADDL $15*32, SI
 #define D	75			// prefetch some iterations ahead
@@ -156,64 +158,45 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	PREFETCHT0 (D+14)*32(SI)
 
 	// group Y0--Y3 into nibbles in the same registers
-	VMOVDQU Y2, Y4			// stash away Y2 and Y3 to free some registers
-	VMOVDQU Y3, y3-192(SP)
-
-	VPSRLD $1, Y0, Y6
+	VPAND Y0, Y6, Y5
+	VPSRLD $1, Y5, Y5
+	VPAND Y1, Y7, Y4
+	VPADDD Y4, Y4, Y4
 	VPAND Y0, Y7, Y0
-	VPAND Y6, Y7, Y5
-	VPSRLD $1, Y6, Y6
-	VPAND Y6, Y7, Y2
-	VPSRLD $1, Y6, Y6
-	VPAND Y6, Y7, Y3
+	VPAND Y1, Y6, Y1
+	VPOR Y0, Y4, Y0			// Y0 = eca86420 (low crumbs)
+	VPOR Y1, Y5, Y1			// Y1 = fdb97531 (low crumbs)
 
-	VPADDD Y7, Y7, Y7		// 0x22222222
+	VPAND Y2, Y6, Y5
+	VPSRLD $1, Y5, Y5
+	VPAND Y3, Y7, Y4
+	VPADDD Y4, Y4, Y4
+	VPAND Y2, Y7, Y2
+	VPBROADCASTD magic<>+44(SB), Y7	// 0x33333333
+	VPAND Y3, Y6, Y3
+	VPSLLD $2, Y7, Y6		// 0xcccccccc
+	VPOR Y2, Y4, Y2			// Y2 = eca86420 (high crumbs)
+	VPOR Y3, Y5, Y3			// Y3 = fdb97531 (high crumbs)
 
-	VPADDD Y1, Y1, Y6
-	VPAND Y6, Y7, Y6
-	VPOR Y0, Y6, Y0
-	VPSRLD $1, Y1, Y6
+	VPAND Y0, Y6, Y5
+	VPSRLD $2, Y5, Y5
+	VPAND Y2, Y7, Y4
+	VPSLLD $2, Y4, Y4
+	VPAND Y0, Y7, Y0
+	VPAND Y2, Y6, Y2
+	VPOR Y0, Y4, Y0			// Y0 = c840
+	VPOR Y2, Y5, Y2			// Y2 = ea62
+
+	VPAND Y1, Y6, Y5
+	VPSRLD $2, Y5, Y5
+	VPAND Y3, Y7, Y4
+	VPSLLD $2, Y4, Y4
 	VPAND Y1, Y7, Y1
-	VPOR Y1, Y5, Y1
-	VPAND Y6, Y7, Y5
-	VPSRLD $1, Y6, Y6
-	VPOR Y2, Y5, Y2
-	VPAND Y6, Y7, Y6
-	VPOR Y3, Y6, Y3
+	VPAND Y3, Y6, Y3
+	VPOR Y1, Y4, Y1			// Y1 = d951
+	VPOR Y3, Y5, Y3			// Y3 = fb73
 
-	VMOVDQU y3-192(SP), Y5
-	VPADDD Y7, Y7, Y7		// 0x44444444
-
-	VPSLLD $2, Y4, Y6
-	VPAND Y6, Y7, Y6
-	VPOR Y0, Y6, Y0
-	VPADDD Y4, Y4, Y6
-	VPAND Y6, Y7, Y6
-	VPOR Y1, Y6, Y1
-	VPAND Y4, Y7, Y6
-	VPSRLD $1, Y4, Y4
-	VPOR Y2, Y6, Y2
-	VPAND Y4, Y7, Y4
-	VPOR Y3, Y4, Y3
-
-	VPADDD Y7, Y7, Y7		// 0x88888888
-
-	VPSLLD $3, Y5, Y6
-	VPAND Y6, Y7, Y6
-	VPOR Y0, Y6, Y0
-	VPSLLD $2, Y5, Y6
-	VPAND Y6, Y7, Y6
-	VPOR Y1, Y6, Y1
-	VPADDD Y5, Y5, Y6
-	VPAND Y6, Y7, Y6
-	VPOR Y2, Y6, Y2
-	VPAND Y5, Y7, Y5
-	VPOR Y3, Y5, Y3
-
-	// dword contents in nibbles:
-	// Y4 = c840c840, Y5 = d951d951, Y6 = ea62ea62, Y6 = fb73fb73
-
-	VPBROADCASTD magic<>+44(SB), Y7	// 0x0f0f0f0f for deinterleaving nibbles
+	VPBROADCASTD magic<>+48(SB), Y7	// 0x0f0f0f0f for deinterleaving nibbles
 
 	// pre-shuffle nibbles
 	VPUNPCKLBW Y1, Y0, Y4		// Y4 = d9c85140         (3:2:1:0)
