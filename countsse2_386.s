@@ -9,11 +9,10 @@
 
 // magic transposition constants
 DATA magic<> +0(SB)/8, $0x8040201008040201
-DATA magic<>+ 8(SB)/4, $0x0000cccc
-DATA magic<>+12(SB)/4, $0x00aa00aa
-DATA magic<>+16(SB)/4, $0x0f0f0f0f
-DATA magic<>+20(SB)/4, $0x00000000	// padding
-GLOBL magic<>(SB), RODATA|NOPTR, $24
+DATA magic<>+ 8(SB)/8, $0xaaaaaaaa55555555
+DATA magic<>+16(SB)/8, $0xcccccccc33333333
+DATA magic<>+24(SB)/4, $0x0f0f0f0f
+GLOBL magic<>(SB), RODATA|NOPTR, $28
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't
 // seem to be a good way to do this with less memory wasted.
@@ -32,25 +31,6 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 	PAND C, B \
 	PXOR C, A \
 	POR D, B
-
-// pseudo-transpose the 4x8 bit matrices in Y.  Transforms
-// Y = D7D6D5D4 D3D2D1D0 C7C6C5C4 C3C2C1C0 B7B6B5B4 B3B2B1B0 A7A6A5A4 A3A2A1A0
-// to  D7C7B7A7 D3C3B3A3 D6C6B6A6 D2C2B2A2 D5C5B5A5 D1C1B1A1 D4C4B4A4 D0C0B0A0
-// requires magic constants 0x00aa00aa in X6 and 0x0000cccc in X5
-#define TRANSPOSE(Y) \
-	BITPERMUTE(Y, X6, $7) \
-	BITPERMUTE(Y, X5, $14)
-
-// swap the bits of Y selected by mask M with those S bits to the left.
-// uses X4 as a temporary register
-#define BITPERMUTE(Y, M, S) \
-	MOVOA Y, X4 \
-	PSRLL S, X4 \
-	PXOR Y, X4 \
-	PAND M, X4 \
-	PXOR X4, Y \
-	PSLLL S, X4 \
-	PXOR X4, Y
 
 // Process 4 bytes from S.  Add low word counts to L, high to H
 // assumes mask loaded into X2.  Trashes X4, X5.
@@ -185,10 +165,9 @@ vec:	MOVOA 0*16(SI), X0		// load 240 bytes from buf
 	CSA(X2, X3, X4, X7)
 
 	// load magic constants
-	MOVOU magic<>+8(SB), X7
-	PSHUFD $0x00, X7, X5		// 0x0000cccc for transposition
-	PSHUFD $0x55, X7, X6		// 0x00aa00aa for transposition
-	PSHUFD $0xaa, X7, X7		// 0x0f0f0f0f for deinterleaving the nibbles
+	MOVQ magic<>+8(SB), X7
+	PSHUFD $0x55, X7, X6		// 0xaaaaaaaa
+	PSHUFD $0x00, X7, X7		// 0x55555555
 
 	ADDL $15*16, SI
 #define D	90
@@ -197,66 +176,112 @@ vec:	MOVOA 0*16(SI), X0		// load 240 bytes from buf
 	PREFETCHT0 (D+ 8)*16(SI)
 	PREFETCHT0 (D+12)*16(SI)
 
-	// shuffle registers such that X3:X2:X1:X0 contains dwords
-	// of the form 0xDDCCBBAA
-	MOVOA X2, X4
-	PUNPCKLBW X3, X2		// X2 = DDCCDDCC (lo)
-	PUNPCKHBW X3, X4		// X4 = DDCCDDCC (hi)
-	MOVOA X0, X3
-	PUNPCKLBW X1, X0		// X0 = BBAABBAA (lo)
-	PUNPCKHBW X1, X3		// X3 = BBAABBAA (hi)
-	MOVOA X0, X1
-	PUNPCKLWL X2, X0		// X0 = DDCCBBAA (0)
-	PUNPCKHWL X2, X1		// X1 = DDCCBBAA (1)
-	MOVOA X3, X2
-	PUNPCKLWL X4, X2		// X2 = DDCCBBAA (2)
-	PUNPCKHWL X4, X3		// X3 = DDCCBBAA (3)
-
-	// pseudo-transpose the 8x4 bit matrix in each dword
-	TRANSPOSE(X0)
-	TRANSPOSE(X1)
-	TRANSPOSE(X2)
-	TRANSPOSE(X3)
-
-	// pull out low nibbles from matrices
-	MOVOA X0, X4
-	PSRLL $4, X0
+	// group X0--X3 into nibbles in the same register
+	MOVOA X0, X5
+	PAND X6, X5
+	PSRLL $1, X5
+	MOVOA X1, X4
 	PAND X7, X4
+	PADDL X4, X4
+	PAND X7, X0
+	PAND X6, X1
+	POR X4, X0			// X0 = eca86420 (low crumbs)
+	POR X5, X1			// X1 = fdb97531 (high crumbs)
+
+	MOVOA X2, X5
+	PAND X6, X5
+	PSRLL $1, X5
+	MOVOA X3, X4
+	PAND X7, X4
+	PADDL X4, X4
+	PAND X7, X2
+	PAND X6, X3
+	POR X4, X2			// X0 = eca86420 (low crumbs)
+	POR X5, X3			// X1 = fdb97531 (high crumbs)
+
+	MOVQ magic<>+16(SB), X7
+	PSHUFD $0x55, X7, X6		// 0xcccccccc
+	PSHUFD $0x00, X7, X7		// 0x33333333
+
+	MOVOA X0, X5
+	PAND X6, X5
+	PSRLL $2, X5
+	MOVOA X2, X4
+	PAND X7, X4
+	PSLLL $2, X4
+	PAND X7, X0
+	PAND X6, X2
+	POR X4, X0			// X0 = c840
+	POR X5, X2			// X2 = ea62
+
 	MOVOA X1, X5
-	PSRLL $4, X1
-	PAND X7, X5
+	PAND X6, X5
+	PSRLL $2, X5
+	MOVOA X3, X4
+	PAND X7, X4
+	PSLLL $2, X4
+	PAND X7, X1
+	PAND X6, X3
+	POR X4, X1			// X1 = d951
+	POR X5, X3			// X3 = fb73
+
+	MOVD magic<>+24(SB), X7
+	PSHUFD $0x00, X7, X7		// 0x0f0f0f0f
+
+	// pre-shuffle nibbles
+	MOVOA X2, X5
+	PUNPCKLBW X3, X2		// X2 = fbea7362 (3:2:1:0)
+	PUNPCKHBW X3, X5		// X5 = fbea7362 (7:6:5:4)
+	MOVOA X0, X3
+	PUNPCKLBW X1, X0		// X0 = d9c85140 (3:2:1:0)
+	PUNPCKHBW X1, X3		// X4 = d9c85140 (7:6:5:4)
+	MOVOA X0, X1
+	PUNPCKLWL X2, X0		// X0 = fbead9c873625140 (1:0)
+	PUNPCKHWL X2, X1		// X1 = fbead9c873625140 (3:2)
+	MOVOA X3, X2
+	PUNPCKLWL X5, X2		// X2 = fbead9c873625140 (5:4)
+	PUNPCKHWL X5, X3		// X3 = fbead9c873625140 (7:6)
+
+	// pull high and low nibbles and reduce once
+	MOVOA X0, X4
+	PSRLL $4, X4
+	PAND X7, X0			// X0 = ba983210 (1:0)
+	PAND X7, X4			// X4 = fedc7654 (1:0)
+
 	MOVOA X2, X6
 	PSRLL $4, X2
-	PAND X7, X6
-	PADDB X6, X4			// X4 = ba98:3210:ba98:3210 (lo)
+	PAND X7, X6			// X6 = ba983210 (5:4)
+	PAND X7, X2			// X2 = fedc7654 (5:4)
+
+	PADDB X6, X0			// X0 = ba983210 (1:0)
+	PADDB X4, X2			// X2 = fedc7654 (1:0)
+
+	MOVOA X1, X4
+	PSRLL $4, X4
+	PAND X7, X1			// X1 = ba983210 (3:2)
+	PAND X7, X4			// X4 = fedc7654 (3:2)
+
 	MOVOA X3, X6
 	PSRLL $4, X3
-	PAND X7, X6
-	PADDB X6, X5			// X5 = ba98:3210:ba98:3210 (hi)
+	PAND X7, X6			// X6 = ba983210 (7:6)
+	PAND X7, X3			// X3 = fedc7654 (7:6)
 
-	// pull out high nibbles from matrices
-	PAND X7, X0
-	PAND X7, X1
-	PAND X7, X2
-	PAND X7, X3
+	PADDB X6, X1			// X1 = ba983210 (3:2)
+	PADDB X4, X3			// X3 = fedc7654 (3:2)
 
-	// sum up high nibbles into X0, X1
-	PADDB X2, X0			// X0 = fedc:7654:fedc:7654 (lo)
-	PADDB X3, X1			// X1 = fedc:7654:fedc:7654 (hi)
-
-	// shuffle them around
-	MOVOA X4, X2
-	PUNPCKLLQ X0, X2		// X2 = fedc:ba98:7654:3210 (1/4)
-	PUNPCKHLQ X0, X4		// X4 = fedc:ba98:7654:3210 (2/4)
-	MOVOA X5, X3
-	PUNPCKLLQ X1, X3		// X3 = fedc:ba98:7654:3210 (3/4)
-	PUNPCKHLQ X1, X5		// X5 = fedc:ba98:7654:3210 (4/4)
+	// unpack one last time
+	MOVOA X0, X4
+	PUNPCKLLQ X2, X0		// X0 = fedcba9876543210 (0)
+	PUNPCKHLQ X2, X4		// X4 = fedcba9876543210 (1)
+	MOVOA X1, X5
+	PUNPCKLLQ X3, X1		// X1 = fedcba9876543210 (2)
+	PUNPCKHLQ X3, X5		// X5 = fedcba9876543210 (3)
 
 	// add to counters
 	PXOR X7, X7			// zero register
-	ACCUM(0*16(DX), 1*16(DX), X2)
+	ACCUM(0*16(DX), 1*16(DX), X0)
 	ACCUM(2*16(DX), 3*16(DX), X4)
-	ACCUM(4*16(DX), 5*16(DX), X3)
+	ACCUM(4*16(DX), 5*16(DX), X1)
 	ACCUM(6*16(DX), 7*16(DX), X5)
 
 	SUBL $15*2, AX			// account for possible overflow
