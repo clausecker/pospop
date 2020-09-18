@@ -39,7 +39,7 @@ GLOBL magic<>(SB), RODATA|NOPTR, $40
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in R0, a possibly unaligned input buffer in R1,
 // counters in R2 and a remaining length in R3.
-TEXT count<>(SB), NOSPLIT, $0-0
+TEXT countsimd<>(SB), NOSPLIT, $0-0
 	TST R3, R3			// any data to process at all?
 	CSEL EQ, ZR, R1, R1		// if yes, avoid loading head
 
@@ -58,7 +58,7 @@ TEXT count<>(SB), NOSPLIT, $0-0
 	// load head until alignment/end is reached
 	AND $15, R1, R5			// offset of the buffer start from 16 byte alignment
 	CBZ R5, nohead			// if source buffer is aligned skip head processing
-	SUB R1, R4, R6			// shifted window mask base pointer
+	SUB R4, R1, R6			// shifted window mask base pointer
 	AND $~15, R1, R1		// align the source buffer pointer
 	VLD1.P 16(R1), [V3.B16]		// load head, advance past it
 //	VMOVQ 16(R6), V5		// load mask of bytes that are part of the head
@@ -253,7 +253,61 @@ end:
 //	VUADDW2 V2.B16, V12.H8, V12.H8
 //	VUADDW V3.B8, V15.H8, V15.H8
 //	VUADDW2 V3.B16, V14.H8, V14.H8
-	// TODO: add WORD directives
+	WORD $0x2e201129
+	WORD $0x6e201108
+	WORD $0x2e21116b
+	WORD $0x6e21114a
+	WORD $0x2e2211ad
+	WORD $0x6e22118c
+	WORD $0x2e2311ef
+	WORD $0x6e2311ce
 
 	CALL *R0
+	RET
+
+TEXT accum64<>(SB), NOSPLIT, $0-0
+	MOVD R2, R7			// source register
+	MOVD R2, R8			// destination register
+	MOVD $4, R9			// counter
+
+loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
+	VLD1.P 4*16(R7), [V4.D2, V5.D2, V6.D2, V7.D2]
+
+	SUB $1, R9, R9
+
+	VUXTL V8.H4, V16.S4
+	VUXTL2 V8.H8, V17.S4
+	VUXTL V9.H4, V18.S4
+	VUXTL2 V9.H8, V19.S4
+
+//	VUADDW V16.S2, V0.D2, V0.D2
+//	VUADDW2 V16.S4, V1.D2, V1.D2
+//	VUADDW V17.S2, V2.D2, V2.D2
+//	VUADDW2 V17.S4, V3.D2, V3.D2
+//	VUADDW V18.S2, V4.D2, V4.D2
+//	VUADDW2 V18.S4, V5.D2, V5.D2
+//	VUADDW V19.S2, V6.D2, V6.D2
+//	VUADDW2 V19.S4, V7.D2, V7.D2
+	WORD $0x2eb01000
+	WORD $0x6eb01021
+	WORD $0x2eb11042
+	WORD $0x6eb11063
+	WORD $0x2eb21084
+	WORD $0x6eb210a5
+	WORD $0x2eb310c6
+	WORD $0x6eb310e7
+
+	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R8)
+	VST1.P [V4.D2, V5.D2, V6.D2, V7.D2], 4*16(R8)
+
+	CBNZ R9, loop
+
+	RET
+
+TEXT ·count64simd(SB), 0, $0-32
+	LDP counts+0(FP), (R2, R1)
+	MOVD buf_len+16(FP), R3
+	MOVD $accum64<>(SB), R0
+	LSL $3, R3, R3			// count in bytes
+	CALL countsimd<>(SB)
 	RET
