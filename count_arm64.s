@@ -214,17 +214,17 @@ endvec:	VMOVI $0, V0.B16		// counter registers
 	VMOVI $0, V2.B16
 	VMOVI $0, V3.B16
 
-	// process tail, 4 bytes at a time
+	// process tail, 8 bytes at a time
 	SUBS $8-15*16, R3		// 8 bytes left to process?
 	BLT tail1
 
 //	VMOVQ (R1), V6
 	WORD $0x3dc00026
 
-tail8:	VEXT $4, V6.B16, V6.B16, V7.B16
-	SUBS $8, R3
+tail8:	SUBS $8, R3
+	FMOVS.P 4(R1), F6
+	FMOVS.P 4(R1), F7
 	COUNT4(V0, V1, V6)
-	VEXT $8, V6.B16, V6.B16, V6.B16
 	COUNT4(V2, V3, V7)
 	BGE tail8
 
@@ -270,16 +270,29 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 	MOVD R2, R8			// destination register
 	MOVD $4, R9			// counter
 
+	// load counts registers
 loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
 	VLD1.P 4*16(R7), [V4.D2, V5.D2, V6.D2, V7.D2]
 
 	SUB $1, R9, R9
 
+	// zero extend into dwords
 	VUXTL V8.H4, V16.S4
 	VUXTL2 V8.H8, V17.S4
 	VUXTL V9.H4, V18.S4
 	VUXTL2 V9.H8, V19.S4
 
+	// shift remaining counters forwards
+	// can't use the VMOV alias because the assembler
+	// doesn't support it.  VORR does the trick though
+	VORR V10.B16, V10.B16, V8.B16
+	VORR V11.B16, V11.B16, V9.B16
+	VORR V12.B16, V12.B16, V10.B16
+	VORR V13.B16, V13.B16, V11.B16
+	VORR V14.B16, V14.B16, V12.B16
+	VORR V15.B16, V15.B16, V13.B16
+
+	// accumulate
 //	VUADDW V16.S2, V0.D2, V0.D2
 //	VUADDW2 V16.S4, V1.D2, V1.D2
 //	VUADDW V17.S2, V2.D2, V2.D2
@@ -297,6 +310,7 @@ loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
 	WORD $0x2eb310c6
 	WORD $0x6eb310e7
 
+	// write back
 	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R8)
 	VST1.P [V4.D2, V5.D2, V6.D2, V7.D2], 4*16(R8)
 
