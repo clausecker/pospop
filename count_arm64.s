@@ -49,7 +49,6 @@ TEXT countsimd<>(SB), NOSPLIT, $0-0
 	VMOVI $1, V30.B8		// 00000000000000000101010101010101
 	VMOVI $2, V29.B16		// 02020202020202020202020202020202
 	VADD V30.B16, V29.B16, V29.B16	// 02020202020202020303030303030303
-	VMOVI $0, V7.B16		// zero register
 	VMOVI $0, V8.B16		// counter registers
 	VMOVI $0, V10.B16
 	VMOVI $0, V12.B16
@@ -58,7 +57,7 @@ TEXT countsimd<>(SB), NOSPLIT, $0-0
 	// load head until alignment/end is reached
 	AND $15, R1, R5			// offset of the buffer start from 16 byte alignment
 	CBZ R5, nohead			// if source buffer is aligned skip head processing
-	SUB R4, R1, R6			// shifted window mask base pointer
+	SUB R5, R4, R6			// shifted window mask base pointer
 	AND $~15, R1, R1		// align the source buffer pointer
 	VLD1.P 16(R1), [V3.B16]		// load head, advance past it
 //	VMOVQ 16(R6), V5		// load mask of bytes that are part of the head
@@ -71,8 +70,8 @@ TEXT countsimd<>(SB), NOSPLIT, $0-0
 	SUB R5, R3, R5			// number of bytes by which we overshot the buffer
 //	VMOVQ (R4)(R5), V5		// load mask of bytes that overshoot the buffer
 	WORD $0x3ce56885
-//	VBIC V3.B16, V5.B16, V3.B16	// and clear them
-	WORD $0x4e631ca3
+//	VBIC V5.B16, V3.B16, V3.B16	// and clear them
+	WORD $0x4e651c63
 	MOVD R5, R3			// set up true prefix length
 
 norunt:	SUB R3, R5, R3			// mark head as accounted for
@@ -122,19 +121,19 @@ vec:	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
 	CSA(V2, V3, V4)
 
 	// group V0--V3 into nibbles in the same register
-	VUSHR $1, V1.B16, V5.B16
-	VADD V0.B16, V0.B16, V4.B16
-	VUSHR $1, V3.B16, V7.B16
-	VADD V2.B16, V2.B16, V6.B16
+	VUSHR $1, V0.B16, V4.B16
+	VADD V1.B16, V1.B16, V5.B16
+	VUSHR $1, V2.B16, V6.B16
+	VADD V3.B16, V3.B16, V7.B16
 	VBIF V27.B16, V5.B16, V0.B16	// V0 = eca86420 (low crumbs)
 	VBIT V27.B16, V4.B16, V1.B16	// V1 = fdb97531 (high crumbs)
 	VBIF V27.B16, V7.B16, V2.B16	// V2 = eca86420 (low crumbs)
 	VBIT V27.B16, V6.B16, V3.B16	// V3 = fdb97531 (high crumbs)
 
-	VSHL $2, V0.B16, V4.B16
-	VSHL $2, V1.B16, V6.B16
-	VUSHR $2, V2.B16, V5.B16
-	VUSHR $2, V3.B16, V7.B16
+	VUSHR $2, V0.B16, V4.B16
+	VUSHR $2, V1.B16, V6.B16
+	VSHL $2, V2.B16, V5.B16
+	VSHL $2, V3.B16, V7.B16
 	VBIT V26.B16, V4.B16, V2.B16	// V2 = ea62
 	VBIT V26.B16, V6.B16, V3.B16	// V3 = fb73
 	VBIF V26.B16, V5.B16, V0.B16	// V0 = c840
