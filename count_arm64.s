@@ -57,17 +57,18 @@ TEXT countsimd<>(SB), NOSPLIT, $0-0
 	// load head until alignment/end is reached
 	AND $15, R1, R5			// offset of the buffer start from 16 byte alignment
 	CBZ R5, nohead			// if source buffer is aligned skip head processing
-	SUB R5, R4, R6			// shifted window mask base pointer
+	SUB $16, R5, R5			// negated number of bytes til alignment is reached
 	AND $~15, R1, R1		// align the source buffer pointer
+	NEG R5, R5			// number of bytes til alignment is reached
 	VLD1.P 16(R1), [V3.B16]		// load head, advance past it
-//	VMOVQ 16(R6), V5		// load mask of bytes that are part of the head
-	WORD $0x3dc004c5
+//	VMOVQ (R4)(R5), V5		// load mask of bytes that are part of the head
+	WORD $0x3ce56885
 	VAND V5.B16, V3.B16, V3.B16	// and mask out those bytes that are not
 	CMP R5, R3			// is the head shorter than the buffer?
 	BLT norunt
 
 	// buffer is short and does not cross a 16 byte boundary
-	SUB R5, R3, R5			// number of bytes by which we overshot the buffer
+	SUB R3, R5, R5			// number of bytes by which we overshoot the buffer
 //	VMOVQ (R4)(R5), V5		// load mask of bytes that overshoot the buffer
 	WORD $0x3ce56885
 //	VBIC V5.B16, V3.B16, V3.B16	// and clear them
@@ -205,7 +206,7 @@ vec:	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
 	MOVD $65535, R6			// space left til overflow could occur
 
 have_space:
-	SUBS $15*16, R3			// account for bytes consumed
+	SUBS $15*16, R3, R3		// account for bytes consumed
 	BGE vec	
 
 endvec:	VMOVI $0, V0.B16		// counter registers
@@ -214,11 +215,9 @@ endvec:	VMOVI $0, V0.B16		// counter registers
 	VMOVI $0, V3.B16
 
 	// process tail, 8 bytes at a time
-	SUBS $8-15*16, R3		// 8 bytes left to process?
+	ADDS $15*16-8, R3, R3		// 8 bytes left to process?
 	BLT tail1
 
-//	VMOVQ (R1), V6
-	WORD $0x3dc00026
 
 tail8:	SUBS $8, R3
 	FMOVS.P 4(R1), F6
@@ -228,14 +227,15 @@ tail8:	SUBS $8, R3
 	BGE tail8
 
 	// process remaining 0--7 byte
-tail1:	SUBS $-8, R3			// anything left to process?
+tail1:	ADDS $8, R3			// anything left to process?
 	BLE end
 
+	FMOVD (R1), F6			// load 8 bytes from buffer
 	SUB R3, R4, R6			// shifted window address
 //	VMOVQ 16(R6), V5		// load window mask
 	WORD $0x3dc004c5
-//	VBIC V6.B16, V5.B16, V6.B16	// mask out the desired bytes
-	WORD $0x4e661ca6
+//	VBIC V5.B16, V6.B16, V6.B16	// mask out the desired bytes
+	WORD $0x4e651cc6
 
 	// process tail
 	VEXT $4, V6.B16, V6.B16, V7.B16
@@ -262,6 +262,160 @@ end:
 	WORD $0x6e2311ce
 
 	CALL *R0
+	RET
+
+TEXT accum8<>(SB), NOSPLIT, $0-0
+	// load counts registers
+	VLD1 (R2), [V0.D2, V1.D2, V2.D2, V3.D2]
+
+	// zero extend into dwords and fold
+//	VUADDL V8.H4, V10.H4, V16.S4
+//	VUADDL2 V8.H8, V10.H8, V17.S4
+//	VUADDL V9.H4, V11.H4, V18.S4
+//	VUADDL2 V9.H8, V11.H8, V19.S4
+//	VUADDL V12.H4, V14.H4, V20.S4
+//	VUADDL2 V12.H8, V14.H8, V21.S4
+//	VUADDL V13.H4, V15.H4, V22.S4
+//	VUADDL2 V13.H8, V15.H8, V23.S4
+	WORD $0x2e680150
+	WORD $0x6e680151
+	WORD $0x2e690172
+	WORD $0x6e690173
+	WORD $0x2e6c01d4
+	WORD $0x6e6c01d5
+	WORD $0x2e6d01f6
+	WORD $0x6e6d01f7
+
+	// reduce integer pairs
+	VADD V18.S4, V16.S4, V16.S4
+	VADD V19.S4, V17.S4, V17.S4
+	VADD V22.S4, V20.S4, V20.S4
+	VADD V23.S4, V21.S4, V21.S4
+	VADD V20.S4, V16.S4, V16.S4
+	VADD V21.S4, V17.S4, V17.S4
+
+	// accumulate
+//	VUADDW V16.S2, V0.D2, V0.D2
+//	VUADDW2 V16.S4, V1.D2, V1.D2
+//	VUADDW V17.S2, V2.D2, V2.D2
+//	VUADDW2 V17.S4, V3.D2, V3.D2
+	WORD $0x2eb01000
+	WORD $0x6eb01021
+	WORD $0x2eb11042
+	WORD $0x6eb11063
+
+	// write back counts registers
+	VST1 [V0.D2, V1.D2, V2.D2, V3.D2], (R2)
+	RET
+
+TEXT accum16<>(SB), NOSPLIT, $0-0
+	// load counts registers
+	VLD1.P 4*16(R2), [V0.D2, V1.D2, V2.D2, V3.D2]
+	VLD1 (R2), [V4.D2, V5.D2, V6.D2, V7.D2]
+	SUB $4*16, R2, R2		// move R2 back to the beginning
+
+	// zero extend into dwords and fold
+//	VUADDL V8.H4, V10.H4, V16.S4
+//	VUADDL2 V8.H8, V10.H8, V17.S4
+//	VUADDL V9.H4, V11.H4, V18.S4
+//	VUADDL2 V9.H8, V11.H8, V19.S4
+//	VUADDL V12.H4, V14.H4, V20.S4
+//	VUADDL2 V12.H8, V14.H8, V21.S4
+//	VUADDL V13.H4, V15.H4, V22.S4
+//	VUADDL2 V13.H8, V15.H8, V23.S4
+	WORD $0x2e680150
+	WORD $0x6e680151
+	WORD $0x2e690172
+	WORD $0x6e690173
+	WORD $0x2e6c01d4
+	WORD $0x6e6c01d5
+	WORD $0x2e6d01f6
+	WORD $0x6e6d01f7
+
+	// reduce integer pairs
+	VADD V20.S4, V16.S4, V16.S4
+	VADD V21.S4, V17.S4, V17.S4
+	VADD V22.S4, V18.S4, V18.S4
+	VADD V23.S4, V19.S4, V19.S4
+
+	// accumulate
+//	VUADDW V16.S2, V0.D2, V0.D2
+//	VUADDW2 V16.S4, V1.D2, V1.D2
+//	VUADDW V17.S2, V2.D2, V2.D2
+//	VUADDW2 V17.S4, V3.D2, V3.D2
+//	VUADDW V18.S2, V4.D2, V4.D2
+//	VUADDW2 V18.S4, V5.D2, V5.D2
+//	VUADDW V19.S2, V6.D2, V6.D2
+//	VUADDW2 V19.S4, V7.D2, V7.D2
+	WORD $0x2eb01000
+	WORD $0x6eb01021
+	WORD $0x2eb11042
+	WORD $0x6eb11063
+	WORD $0x2eb21084
+	WORD $0x6eb210a5
+	WORD $0x2eb310c6
+	WORD $0x6eb310e7
+
+	// write back
+	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R2)
+	VST1 [V4.D2, V5.D2, V6.D2, V7.D2], (R2)
+	SUB $4*16, R2, R2		// restore R2
+
+	RET
+
+TEXT accum32<>(SB), NOSPLIT, $0-0
+	MOVD R2, R7			// source register
+	MOVD R2, R8			// destination register
+	MOVD $2, R9			// counter
+
+	// load counts registers
+loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
+	VLD1.P 4*16(R7), [V4.D2, V5.D2, V6.D2, V7.D2]
+
+	SUB $1, R9, R9
+
+	// zero extend into dwords and fold
+//	VUADDL V8.H4, V12.H4, V16.S4
+//	VUADDL2 V8.H8, V12.H8, V17.S4
+//	VUADDL V9.H4, V13.H4, V18.S4
+//	VUADDL2 V9.H8, V13.H8, V19.S4
+	WORD $0x2e680190
+	WORD $0x6e680191
+	WORD $0x2e6901b2
+	WORD $0x6e6901b3
+
+	// shift remaining counters forwards
+	// can't use the VMOV alias because the assembler
+	// doesn't support it.  VORR does the trick though
+	VORR V10.B16, V10.B16, V8.B16
+	VORR V11.B16, V11.B16, V9.B16
+	VORR V14.B16, V14.B16, V12.B16
+	VORR V15.B16, V15.B16, V13.B16
+
+	// accumulate
+//	VUADDW V16.S2, V0.D2, V0.D2
+//	VUADDW2 V16.S4, V1.D2, V1.D2
+//	VUADDW V17.S2, V2.D2, V2.D2
+//	VUADDW2 V17.S4, V3.D2, V3.D2
+//	VUADDW V18.S2, V4.D2, V4.D2
+//	VUADDW2 V18.S4, V5.D2, V5.D2
+//	VUADDW V19.S2, V6.D2, V6.D2
+//	VUADDW2 V19.S4, V7.D2, V7.D2
+	WORD $0x2eb01000
+	WORD $0x6eb01021
+	WORD $0x2eb11042
+	WORD $0x6eb11063
+	WORD $0x2eb21084
+	WORD $0x6eb210a5
+	WORD $0x2eb310c6
+	WORD $0x6eb310e7
+
+	// write back
+	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R8)
+	VST1.P [V4.D2, V5.D2, V6.D2, V7.D2], 4*16(R8)
+
+	CBNZ R9, loop
+
 	RET
 
 TEXT accum64<>(SB), NOSPLIT, $0-0
@@ -315,6 +469,29 @@ loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
 
 	CBNZ R9, loop
 
+	RET
+
+TEXT ·count8simd(SB), 0, $0-32
+	LDP counts+0(FP), (R2, R1)
+	MOVD buf_len+16(FP), R3
+	MOVD $accum8<>(SB), R0
+	CALL countsimd<>(SB)
+	RET
+
+TEXT ·count16simd(SB), 0, $0-32
+	LDP counts+0(FP), (R2, R1)
+	MOVD buf_len+16(FP), R3
+	MOVD $accum16<>(SB), R0
+	LSL $1, R3, R3			// count in bytes
+	CALL countsimd<>(SB)
+	RET
+
+TEXT ·count32simd(SB), 0, $0-32
+	LDP counts+0(FP), (R2, R1)
+	MOVD buf_len+16(FP), R3
+	MOVD $accum32<>(SB), R0
+	LSL $2, R3, R3			// count in bytes
+	CALL countsimd<>(SB)
 	RET
 
 TEXT ·count64simd(SB), 0, $0-32
