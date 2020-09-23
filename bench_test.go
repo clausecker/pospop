@@ -81,7 +81,7 @@ func BenchmarkCount16(b *testing.B) {
 		lengths = benchmarkLengthsShort
 	}
 
-	maxlen := lengths[len(lengths)-1]
+	maxlen := lengths[len(lengths)-1] / 2
 	buf := make([]uint16, maxlen)
 	for i := range buf {
 		buf[i] = uint16(rand.Int63())
@@ -124,7 +124,7 @@ func BenchmarkCount32(b *testing.B) {
 		lengths = benchmarkLengthsShort
 	}
 
-	maxlen := lengths[len(lengths)-1]
+	maxlen := lengths[len(lengths)-1] / 4
 	buf := make([]uint32, maxlen)
 	for i := range buf {
 		buf[i] = uint32(rand.Int63())
@@ -167,7 +167,7 @@ func BenchmarkCount64(b *testing.B) {
 		lengths = benchmarkLengthsShort
 	}
 
-	maxlen := lengths[len(lengths)-1]
+	maxlen := lengths[len(lengths)-1] / 8
 	buf := make([]uint64, maxlen)
 	for i := range buf {
 		buf[i] = rand.Uint64()
