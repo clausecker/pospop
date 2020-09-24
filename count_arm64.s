@@ -64,7 +64,7 @@ TEXT countsimd<>(SB), NOSPLIT, $0-0
 //	VMOVQ (R4)(R5), V5		// load mask of bytes that are part of the head
 	WORD $0x3ce56885
 	VAND V5.B16, V3.B16, V3.B16	// and mask out those bytes that are not
-	CMP R5, R3			// is the head shorter than the buffer?
+	CMP R3, R5			// is the head shorter than the buffer?
 	BLT norunt
 
 	// buffer is short and does not cross a 16 byte boundary
@@ -75,7 +75,7 @@ TEXT countsimd<>(SB), NOSPLIT, $0-0
 	WORD $0x4e651c63
 	MOVD R5, R3			// set up true prefix length
 
-norunt:	SUB R3, R5, R3			// mark head as accounted for
+norunt:	SUB R5, R3, R3			// mark head as accounted for
 
 	// process head in increments of 2 bytes
 	COUNT4(V8, V10, V3)
