@@ -1,5 +1,7 @@
 // Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
 
+//+build arm64,go1.16
+
 package pospop
 
 func count8simd(counts *[8]int, buf []uint8)

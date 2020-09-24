@@ -1,6 +1,7 @@
 // Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
 
-// +build !amd64,!386,!arm64
+// +build !amd64,!386
+// +build !go1.16 !arm64
 
 package pospop
 

@@ -1,3 +1,5 @@
+//+build arm64,go1.16
+
 #include "textflag.h"
 
 // SIMD kernel for the positional population count operation.  All these
