@@ -9,8 +9,11 @@ import (
 
 // standard test lengths to try
 var testLengths = []int{
-	0, 1,
-	15, 16, 17,
+	0, 1, 2, 3,
+	4, 5, 6, 7,
+	8, 9, 10, 11,
+	12, 13, 14, 15,
+	16, 17, 18, 19,
 	31, 32, 33,
 	63, 64, 65,
 	95, 97, 98,
@@ -42,7 +45,8 @@ func countDiff(a []int, b []int) []int {
 // test the correctness of a count8 implementation
 func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 	for _, len := range testLengths {
-		buf := make([]uint8, len)
+		buf := make([]uint8, len+1)
+		buf = buf[1:len+1]	// ensure misalignment
 		for i := range buf {
 			buf[i] = uint8(rand.Int63())
 		}
@@ -63,7 +67,8 @@ func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 // test the correctness of a count16 implementation
 func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 	for _, len := range testLengths {
-		buf := make([]uint16, len)
+		buf := make([]uint16, len+1)
+		buf = buf[1:len+1]	// ensure misalignment
 		for i := range buf {
 			buf[i] = uint16(rand.Int63())
 		}
@@ -84,7 +89,8 @@ func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 // test the correctness of a count32 implementation
 func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 	for _, len := range testLengths {
-		buf := make([]uint32, len)
+		buf := make([]uint32, len+1)
+		buf = buf[1:len+1]	// ensure misalignment
 		for i := range buf {
 			buf[i] = rand.Uint32()
 		}
@@ -102,10 +108,11 @@ func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 	}
 }
 
-// test the correctness of Count8
+// test the correctness of a count64 implementation
 func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 	for _, len := range testLengths {
-		buf := make([]uint64, len)
+		buf := make([]uint64, len+1)
+		buf = buf[1:len+1]	// ensure misalignment
 		for i := range buf {
 			buf[i] = rand.Uint64()
 		}
