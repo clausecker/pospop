@@ -1,4 +1,4 @@
-module github.com/fuzxxl/pospop
+module github.com/clausecker/pospop
 
 go 1.14
 
