@@ -5,25 +5,64 @@ This repository contains implementations of the positional population
 count functions for Go.  Details on the algorithms used will be
 published in a future research paper.
 
+To use this library, import it as follows:
+
+    import "github.com/clausecker/pospop"
+
+You can then count populations using the Count8, Count16, Count32,
+and Count64 functions:
+
+    var counts [8]int
+    pospop.Count8(&counts, buf)
+
+The positional population count for buf is added to the contents of
+counts.
+
+Supported Platforms
+-------------------
+
 The kernels works on a block size of 240 or 480 bytes (depending on
 whether AVX2 is available or not).  A buffer size that is a multiple
 of 480 bytes and at least 10 kB in size is recommended.
 
-Performance with a 100 kB buffer on an Intel(R) Xeon(R) W-2133 CPU
-@ 3.60 GHz:
+Implementations are provided for the following SIMD extensions:
 
-	amd64/avx2	amd64/sse2	386/avx2	386/sse2
-Count8	29.6 GB/s	14.1 GB/s	27.2 GB/s	13.7 GB/s
-Count16	27.5 GB/s	14.2 GB/s	27.2 GB/s	13.7 GB/s
-Count32	27.5 GB/s	14.2 GB/s	27.3 GB/s	13.7 GB/s
-Count64	27.5 GB/s	14.2 GB/s	27.3 GB/s	13.6 GB/s
+ * AVX2 (amd64, 386)
+ * SSE2 (amd64, 386)
+ * NEON (arm64)
+ * generic kernel (all architectures)
 
-Work left to do:
+Due to some required improvements in the assembler, the NEON kernel will
+only be available on Go 1.16 or newer.  When building with earlier
+versions of the tool chain, only the generic kernel is available.
 
- * port the arm64 kernel(s) to Go-style asm, pending improvements to
-   the Go assembler; Go 1.16 will be required to use these kernels.
+The library automatically chooses the fastest available kernel for
+the system it is running on.
+
+Performance
+-----------
+
+A buffer size of 100 kB was used.  As all functions are based on the
+same kernel with a different accumulation function, they all perform
+equally well.  The following performance table is grouped by the
+instruction set used and the architecture it runs on.
+
+	amd64		386		arm64
+avx2	32.8 GB/s	32.8 GB/s	---
+sse2	16.8 GB/s	16.4 GB/s	---
+neon	---		---		2.31 GB/s
+generic	450 MB/s	450 MB/s	48.3 MB/s
+
+The following systems were used for benchmarks:
+
+ * amd64, 386: Intel(R) Xeon(R) W-2133 CPU @ 3.60 GHz
+ * arm64: ARM Cortex-A53 r0p4 (Raspberry Pi 3B)
+
+Remaining Work
+--------------
+
  * provide assembly kernels for arm, ppcle, and others
-   (hardware donations appreciated for targets other than those listed)
+   (hardware donations appreciated for further targets)
  * provide variants of Count16, Count32, and Count64 working on byte
    arrays
 
