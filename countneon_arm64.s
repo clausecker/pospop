@@ -41,7 +41,7 @@ GLOBL magic<>(SB), RODATA|NOPTR, $40
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in R0, a possibly unaligned input buffer in R1,
 // counters in R2 and a remaining length in R3.
-TEXT countsimd<>(SB), NOSPLIT, $0-0
+TEXT countneon<>(SB), NOSPLIT, $0-0
 	TST R3, R3			// any data to process at all?
 	CSEL EQ, ZR, R1, R1		// if yes, avoid loading head
 
@@ -473,33 +473,33 @@ loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
 
 	RET
 
-TEXT ·count8simd(SB), 0, $0-32
+TEXT ·count8neon(SB), 0, $0-32
 	LDP counts+0(FP), (R2, R1)
 	MOVD buf_len+16(FP), R3
 	MOVD $accum8<>(SB), R0
-	CALL countsimd<>(SB)
+	CALL countneon<>(SB)
 	RET
 
-TEXT ·count16simd(SB), 0, $0-32
+TEXT ·count16neon(SB), 0, $0-32
 	LDP counts+0(FP), (R2, R1)
 	MOVD buf_len+16(FP), R3
 	MOVD $accum16<>(SB), R0
 	LSL $1, R3, R3			// count in bytes
-	CALL countsimd<>(SB)
+	CALL countneon<>(SB)
 	RET
 
-TEXT ·count32simd(SB), 0, $0-32
+TEXT ·count32neon(SB), 0, $0-32
 	LDP counts+0(FP), (R2, R1)
 	MOVD buf_len+16(FP), R3
 	MOVD $accum32<>(SB), R0
 	LSL $2, R3, R3			// count in bytes
-	CALL countsimd<>(SB)
+	CALL countneon<>(SB)
 	RET
 
-TEXT ·count64simd(SB), 0, $0-32
+TEXT ·count64neon(SB), 0, $0-32
 	LDP counts+0(FP), (R2, R1)
 	MOVD buf_len+16(FP), R3
 	MOVD $accum64<>(SB), R0
 	LSL $3, R3, R3			// count in bytes
-	CALL countsimd<>(SB)
+	CALL countneon<>(SB)
 	RET
