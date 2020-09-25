@@ -13,6 +13,7 @@ func count16sse2(counts *[16]int, buf []uint16)
 func count32avx2(counts *[32]int, buf []uint32)
 func count32sse2(counts *[32]int, buf []uint32)
 
+func count64avx512(counts *[64]int, buf []uint64)
 func count64avx2(counts *[64]int, buf []uint64)
 func count64sse2(counts *[64]int, buf []uint64)
 
@@ -38,4 +39,7 @@ var count64funcs = []count64impl{
 	{count64avx2, "avx2", cpu.X86.HasAVX2},
 	{count64sse2, "sse2", cpu.X86.HasSSE2},
 	{count64generic, "generic", true},
+	// placed last as a temporary hack until
+	// AVX-512 detection has landed into the cpu package
+	{count64avx512, "avx512", true},
 }

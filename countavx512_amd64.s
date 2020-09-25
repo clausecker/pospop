@@ -19,7 +19,7 @@ GLOBL magic<>(SB), RODATA|NOPTR, $28
 #define CSA(A, B, C, D) \
 	VMOVDQA64 A, D \
 	VPTERNLOGD $0x96, C, B, A \
-	VPTERNLOGD $0xe8, C, D, A
+	VPTERNLOGD $0xe8, C, D, B
 
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
@@ -29,18 +29,18 @@ TEXT countavx512<>(SB), NOSPLIT, $0-0
 	CMOVQEQ CX, SI			// if not, avoid loading head
 
 	// head and tail constants, counter registers
-	VMOVQ magic<>+0(SB), X15	// 0706050403020100
+	VMOVQ magic<>+0(SB), X1		// 0706050403020100
 	VPBROADCASTQ magic<>+8(SB), Z31	// 8040201008040201
 	VPTERNLOGD $0xff, Z30, Z30, Z30	// ffffffff
 	VPXORD Y25, Y25, Y25		// zero register
 	VPXOR Y0, Y0, Y0		// counter register
 
 	// turn X15 into a set of qword masks in Z29
-	VPUNPCKLBW X29, X29, X29	// 7766:5544:3322:1100
-	VPERMQ $0x50, Y29, Y29		// 7766:5544:7766:5544:3322:1100:3322:1100
-	VPUNPCKLWD Y29, Y29, Y29	// 7777:6666:5555:4444:3333:2222:1111:0000
-	VSHUFI64X2 $0x50, Z29, Z29, Z29	// 77:66:55:44:77:66:55:44:33:22:11:00:33:22:11:00
-	VPUNPCKLDQ Z29, Z29, Z29	// 77:77:66:66:55:55:44:44:33:33:22:22:11:11:00:00
+	VPUNPCKLBW X1, X1, X1		// 7766:5544:3322:1100
+	VPERMQ $0x50, Y1, Y1		// 7766:5544:7766:5544:3322:1100:3322:1100
+	VPUNPCKLWD Y1, Y1, Y1		// 7777:6666:5555:4444:3333:2222:1111:0000
+	VPMOVZXDQ Y1, Z1		// -7:-6:-5:-4:-3:-2:-1:-0
+	VPSHUFD $0xa0, Z1, Z29		// 77:66:55:44:33:22:11:00
 
 	// compute misalignment mask
 	MOVL SI, DX
@@ -116,7 +116,7 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 
 	ADDQ $15*64, SI
 
-#define D	75			// prefetch some iterations ahead
+#define D	45			// prefetch some iterations ahead
 	PREFETCHT0 (D+ 0)*64(SI)
 	PREFETCHT0 (D+ 1)*64(SI)
 	PREFETCHT0 (D+ 2)*64(SI)
@@ -139,9 +139,9 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VPADDD Z1, Z1, Z5
 	VPSRLD $1, Z2, Z6
 	VPADDD Z3, Z3, Z7
-	VPTERNLOGD $0x74, Z28, Z5, Z0	// Z0 = eca86420 (low crumbs)
+	VPTERNLOGD $0xe4, Z28, Z5, Z0	// Z0 = eca86420 (low crumbs)
 	VPTERNLOGD $0xd8, Z28, Z4, Z1	// Z1 = fdb97531 (high crumbs)
-	VPTERNLOGD $0x74, Z28, Z7, Z2	// Z2 = eca86420 (low crumbs)
+	VPTERNLOGD $0xe4, Z28, Z7, Z2	// Z2 = eca86420 (low crumbs)
 	VPTERNLOGD $0xd8, Z28, Z6, Z3	// Z3 = fdb97531 (high crumbs)
 
 	VPSRLD $2, Z0, Z4
@@ -150,8 +150,8 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VPSLLD $2, Z3, Z7
 	VPTERNLOGD $0xd8, Z27, Z4, Z2	// Z2 = ea63
 	VPTERNLOGD $0xd8, Z27, Z6, Z3	// Z3 = fb73
-	VPTERNLOGD $0x74, Z27, Z5, Z0	// Z0 = c840
-	VPTERNLOGD $0x74, Z27, Z7, Z1	// Z1 = d951
+	VPTERNLOGD $0xe4, Z27, Z5, Z0	// Z0 = c840
+	VPTERNLOGD $0xe4, Z27, Z7, Z1	// Z1 = d951
 
 	// pre-shuffle nibbles (within 128 bit lanes)!
 	VPUNPCKLBW Z3, Z2, Z6		// Z6 = fbea7362 (3:2:1:0)
@@ -167,12 +167,15 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VPANDD Z26, Z4, Z0
 	VPSRLD $4, Z4, Z4
 	VPANDD Z26, Z4, Z4
+
 	VPANDD Z26, Z5, Z1
 	VPSRLD $4, Z5, Z5
 	VPANDD Z26, Z5, Z5
+
 	VPANDD Z26, Z6, Z2
 	VPSRLD $4, Z6, Z6
 	VPANDD Z26, Z6, Z6
+
 	VPANDD Z26, Z7, Z3
 	VPSRLD $4, Z7, Z7
 	VPANDD Z26, Z7, Z7
@@ -181,7 +184,7 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VPADDB Z2, Z0, Z0		// Z0 = ba983210 (1:0)
 	VPADDB Z3, Z1, Z1		// Z1 = ba983210 (3:2)
 	VPADDB Z6, Z4, Z2		// Z2 = fedc7654 (1:0)
-	VPADDB Z6, Z4, Z3		// Z3 = fedc7654 (3:2)
+	VPADDB Z7, Z5, Z3		// Z3 = fedc7654 (3:2)
 
 	// shuffle again to form ordered groups of 16 counters in each lane
 	VPUNPCKLDQ Z2, Z0, Z4		// Z4 = fedcba9876543210 (0)
@@ -190,16 +193,16 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VPUNPCKHDQ Z3, Z1, Z7		// Z7 = fedcba9876543210 (3)
 
 	// reduce lanes once (4x1 lane -> 2x2 lanes)
-	VSHUFI64X2 $0x44, Z5, Z4, Z0	// Z0 = fedcba9876543210 (1:0:1:0)
-	VSHUFI64X2 $0xee, Z5, Z4, Z1	// Z1 = fedcba9876543210 (1:0:1:0)
-	VSHUFI64X2 $0x44, Z7, Z6, Z2	// Z2 = fedcba9876543210 (3:2:3:2)
-	VSHUFI64X2 $0xee, Z7, Z6, Z3	// Z2 = fedcba9876543210 (3:2:3:2)
+	VSHUFI64X2 $0x44, Z5, Z4, Z0	// Z0 = fedcba9876543210 (1:1:0:0)
+	VSHUFI64X2 $0xee, Z5, Z4, Z1	// Z1 = fedcba9876543210 (1:1:0:0)
+	VSHUFI64X2 $0x44, Z7, Z6, Z2	// Z2 = fedcba9876543210 (3:3:2:2)
+	VSHUFI64X2 $0xee, Z7, Z6, Z3	// Z2 = fedcba9876543210 (3:3:2:2)
 	VPADDB Z1, Z0, Z0
 	VPADDB Z3, Z2, Z2
 
 	// reduce lanes again (2x2 lanes -> 1x4 lane)
-	VSHUFI64X2 $0xee, Z2, Z0, Z1	// Z1 = fedcba9876543210 (3:2:1:0)
-	VSHUFI64X2 $0x44, Z2, Z0, Z0	// Z0 = fedcba9876543210 (3:2:1:0)
+	VSHUFI64X2 $0x88, Z2, Z0, Z1	// Z1 = fedcba9876543210 (3:2:1:0)
+	VSHUFI64X2 $0xdd, Z2, Z0, Z0	// Z0 = fedcba9876543210 (3:2:1:0)
 	VPADDB Z1, Z0, Z0
 
 	// Zero extend and add to Z8, Z9
@@ -259,4 +262,51 @@ end:	VPUNPCKLBW Z25, Z0, Z1
 	// and perform a final accumulation
 	CALL *BX
 	VZEROUPPER
+	RET
+
+TEXT accum64<>(SB), NOSPLIT, $0-0
+	VPMOVZXWQ X8, Z3
+	VPMOVZXWQ X9, Z4
+	VPADDQ 0*64(DI), Z3, Z3
+	VPADDQ 1*64(DI), Z4, Z4
+	VMOVDQU64 Z3, 0*64(DI)
+	VMOVDQU64 Z4, 1*64(DI)
+
+	VEXTRACTI64X2 $1, Z8, X3
+	VEXTRACTI64X2 $1, Z9, X4
+	VPMOVZXWQ X3, Z3
+	VPMOVZXWQ X4, Z4
+	VPADDQ 2*64(DI), Z3, Z3
+	VPADDQ 3*64(DI), Z4, Z4
+	VMOVDQU64 Z3, 2*64(DI)
+	VMOVDQU64 Z4, 3*64(DI)
+
+	VEXTRACTI64X2 $2, Z8, X3
+	VEXTRACTI64X2 $2, Z9, X4
+	VPMOVZXWQ X3, Z3
+	VPMOVZXWQ X4, Z4
+	VPADDQ 4*64(DI), Z3, Z3
+	VPADDQ 5*64(DI), Z4, Z4
+	VMOVDQU64 Z3, 4*64(DI)
+	VMOVDQU64 Z4, 5*64(DI)
+
+	VEXTRACTI64X2 $3, Z8, X3
+	VEXTRACTI64X2 $3, Z9, X4
+	VPMOVZXWQ X3, Z3
+	VPMOVZXWQ X4, Z4
+	VPADDQ 6*64(DI), Z3, Z3
+	VPADDQ 7*64(DI), Z4, Z4
+	VMOVDQU64 Z3, 6*64(DI)
+	VMOVDQU64 Z4, 7*64(DI)
+
+	RET
+
+// func count64avx512(counts *[64]int, buf []uint64)
+TEXT ·count64avx512(SB), 0, $0-32
+	MOVQ counts+0(FP), DI
+	MOVQ buf_base+8(FP), SI
+	MOVQ buf_len+16(FP), CX
+	MOVQ $accum64<>(SB), BX
+	SHLQ $3, CX
+	CALL countavx512<>(SB)
 	RET
