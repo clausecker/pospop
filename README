@@ -50,13 +50,13 @@ instruction set used and the architecture it runs on.
 	amd64		386		arm64
 avx2	32.8 GB/s	32.8 GB/s	---
 sse2	16.8 GB/s	16.4 GB/s	---
-neon	---		---		2.31 GB/s
-generic	450 MB/s	450 MB/s	48.3 MB/s
+neon	---		---		3.81 GB/s
+generic	450 MB/s	450 MB/s	134 MB/s
 
 The following systems were used for benchmarks:
 
  * amd64, 386: Intel(R) Xeon(R) W-2133 CPU @ 3.60 GHz
- * arm64: ARM Cortex-A53 r0p4 (Raspberry Pi 3B)
+ * arm64: ARM Cortex-A72 r0p3 (Raspberry Pi 4B)
 
 Remaining Work
 --------------
