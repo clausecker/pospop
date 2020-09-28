@@ -5,7 +5,7 @@
 // reduction to first reduce 960 byte into 4x64 byte, followed by a
 // bunch of shuffles to group the positional registers into nibbles.
 // These are then summed up using a width-specific summation function.
-// Required CPU extensions: BMI2, AVX-512 -F, -VL, -BW, -DQ.
+// Required CPU extensions: BMI2, AVX-512 -F, -BW.
 
 // magic constants
 DATA magic<>+ 0(SB)/8, $0x0706050403020100
@@ -264,6 +264,103 @@ end:	VPUNPCKLBW Z25, Z0, Z1
 	VZEROUPPER
 	RET
 
+TEXT accum8<>(SB), NOSPLIT, $0-0
+	// unpack and zero-extend
+	VPMOVZXWQ X8, Z0
+	VEXTRACTI64X2 $1, Z8, X1
+	VPMOVZXWQ X1, Z1
+	VEXTRACTI64X2 $2, Z8, X2
+	VPMOVZXWQ X2, Z2
+	VEXTRACTI64X2 $3, Z8, X3
+	VPMOVZXWQ X3, Z3
+	VPMOVZXWQ X9, Z4
+	VEXTRACTI64X2 $1, Z9, X5
+	VPMOVZXWQ X5, Z5
+	VEXTRACTI64X2 $2, Z9, X6
+	VPMOVZXWQ X6, Z6
+	VEXTRACTI64X2 $3, Z9, X7
+	VPMOVZXWQ X7, Z7
+
+	// fold over thrice
+	VPADDQ Z2, Z0, Z0
+	VPADDQ Z3, Z1, Z1
+	VPADDQ Z6, Z4, Z4
+	VPADDQ Z7, Z5, Z5
+	VPADDQ Z1, Z0, Z0
+	VPADDQ Z5, Z4, Z4
+	VPADDQ Z4, Z0, Z0
+
+	// add to counters
+	VPADDQ 0*64(DI), Z0, Z0
+	VMOVDQU64 Z0, 0*64(DI)
+
+	RET
+
+TEXT accum16<>(SB), NOSPLIT, $0-0
+	// unpack and zero-extend
+	VPMOVZXWQ X8, Z0
+	VEXTRACTI64X2 $1, Z8, X1
+	VPMOVZXWQ X1, Z1
+	VEXTRACTI64X2 $2, Z8, X2
+	VPMOVZXWQ X2, Z2
+	VEXTRACTI64X2 $3, Z8, X3
+	VPMOVZXWQ X3, Z3
+	VPMOVZXWQ X9, Z4
+	VEXTRACTI64X2 $1, Z9, X5
+	VPMOVZXWQ X5, Z5
+	VEXTRACTI64X2 $2, Z9, X6
+	VPMOVZXWQ X6, Z6
+	VEXTRACTI64X2 $3, Z9, X7
+	VPMOVZXWQ X7, Z7
+
+	// fold over twice
+	VPADDQ Z2, Z0, Z0
+	VPADDQ Z3, Z1, Z1
+	VPADDQ Z6, Z4, Z4
+	VPADDQ Z7, Z5, Z5
+	VPADDQ Z1, Z0, Z0
+	VPADDQ Z5, Z4, Z4
+
+	// add to counters
+	VPADDQ 0*64(DI), Z0, Z0
+	VPADDQ 1*64(DI), Z4, Z4
+	VMOVDQU64 Z0, 0*64(DI)
+	VMOVDQU64 Z4, 1*64(DI)
+
+	RET
+
+TEXT accum32<>(SB), NOSPLIT, $0-0
+	// fold high half over low half and reduce
+	VEXTRACTI64X2 $2, Z8, X2
+	VEXTRACTI64X2 $2, Z9, X3
+	VPMOVZXWQ X8, Z0
+	VPMOVZXWQ X9, Z1
+	VPMOVZXWQ X2, Z2
+	VPMOVZXWQ X3, Z3
+	VPADDQ Z2, Z0, Z0
+	VPADDQ Z3, Z1, Z1
+	VPADDQ 0*64(DI), Z0, Z0
+	VPADDQ 1*64(DI), Z1, Z1
+	VMOVDQU64 Z0, 0*64(DI)
+	VMOVDQU64 Z1, 1*64(DI)
+
+	VEXTRACTI64X2 $1, Z8, X0
+	VEXTRACTI64X2 $1, Z9, X1
+	VEXTRACTI64X2 $3, Z8, X2
+	VEXTRACTI64X2 $3, Z9, X3
+	VPMOVZXWQ X0, Z0
+	VPMOVZXWQ X1, Z1
+	VPMOVZXWQ X2, Z2
+	VPMOVZXWQ X3, Z3
+	VPADDQ Z2, Z0, Z0
+	VPADDQ Z3, Z1, Z1
+	VPADDQ 2*64(DI), Z0, Z0
+	VPADDQ 3*64(DI), Z1, Z1
+	VMOVDQU64 Z0, 2*64(DI)
+	VMOVDQU64 Z1, 3*64(DI)
+
+	RET
+
 TEXT accum64<>(SB), NOSPLIT, $0-0
 	VPMOVZXWQ X8, Z3
 	VPMOVZXWQ X9, Z4
@@ -299,6 +396,35 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 	VMOVDQU64 Z3, 6*64(DI)
 	VMOVDQU64 Z4, 7*64(DI)
 
+	RET
+
+// func count8avx512(counts *[8]int, buf []uint8)
+TEXT ·count8avx512(SB), 0, $0-32
+	MOVQ counts+0(FP), DI
+	MOVQ buf_base+8(FP), SI
+	MOVQ buf_len+16(FP), CX
+	MOVQ $accum8<>(SB), BX
+	CALL countavx512<>(SB)
+	RET
+
+// func count16avx512(counts *[16]int, buf []uint16)
+TEXT ·count16avx512(SB), 0, $0-32
+	MOVQ counts+0(FP), DI
+	MOVQ buf_base+8(FP), SI
+	MOVQ buf_len+16(FP), CX
+	MOVQ $accum16<>(SB), BX
+	SHLQ $1, CX
+	CALL countavx512<>(SB)
+	RET
+
+// func count32avx512(counts *[32]int, buf []uint32)
+TEXT ·count32avx512(SB), 0, $0-32
+	MOVQ counts+0(FP), DI
+	MOVQ buf_base+8(FP), SI
+	MOVQ buf_len+16(FP), CX
+	MOVQ $accum32<>(SB), BX
+	SHLQ $2, CX
+	CALL countavx512<>(SB)
 	RET
 
 // func count64avx512(counts *[64]int, buf []uint64)

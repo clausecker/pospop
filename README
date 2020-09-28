@@ -27,6 +27,7 @@ of 480 bytes and at least 10 kB in size is recommended.
 
 Implementations are provided for the following SIMD extensions:
 
+ * AVX-512 F/BW (amd64)
  * AVX2 (amd64, 386)
  * SSE2 (amd64, 386)
  * NEON (arm64)
@@ -48,6 +49,7 @@ equally well.  The following performance table is grouped by the
 instruction set used and the architecture it runs on.
 
 	amd64		386		arm64
+avx512	66,7 GB/s	---		---
 avx2	32.8 GB/s	32.8 GB/s	---
 sse2	16.8 GB/s	16.4 GB/s	---
 neon	---		---		3.81 GB/s
