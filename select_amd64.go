@@ -24,29 +24,29 @@ func count64sse2(counts *[64]int, buf []uint64)
 // AVX-512 detection has landed into the cpu package
 
 var count8funcs = []count8impl{
-	{count8avx2, "avx2", cpu.X86.HasAVX2 && cpu.X86.HasPOPCNT},
+	{count8avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
+	{count8avx2, "avx2", cpu.X86.HasAVX2},
 	{count8sse2, "sse2", cpu.X86.HasSSE2},
 	{count8generic, "generic", true},
-	{count8avx512, "avx512", true},
 }
 
 var count16funcs = []count16impl{
+	{count16avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
 	{count16avx2, "avx2", cpu.X86.HasAVX2},
 	{count16sse2, "sse2", cpu.X86.HasSSE2},
 	{count16generic, "generic", true},
-	{count16avx512, "avx512", true},
 }
 
 var count32funcs = []count32impl{
+	{count32avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
 	{count32avx2, "avx2", cpu.X86.HasAVX2},
 	{count32sse2, "sse2", cpu.X86.HasSSE2},
 	{count32generic, "generic", true},
-	{count32avx512, "avx512", true},
 }
 
 var count64funcs = []count64impl{
+	{count64avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
 	{count64avx2, "avx2", cpu.X86.HasAVX2},
 	{count64sse2, "sse2", cpu.X86.HasSSE2},
 	{count64generic, "generic", true},
-	{count64avx512, "avx512", true},
 }

@@ -2,4 +2,4 @@ module github.com/clausecker/pospop
 
 go 1.14
 
-require golang.org/x/sys v0.0.0-20200826173525-f9321e4c35a6
+require golang.org/x/sys v0.0.0-20200929083018-4d22bbb62b3c
