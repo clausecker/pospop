@@ -46,7 +46,7 @@ func countDiff(a []int, b []int) []int {
 func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 	for _, len := range testLengths {
 		buf := make([]uint8, len+1)
-		buf = buf[1:len+1]	// ensure misalignment
+		buf = buf[1 : len+1] // ensure misalignment
 		for i := range buf {
 			buf[i] = uint8(rand.Int63())
 		}
@@ -68,7 +68,7 @@ func testCount8(t *testing.T, count8 func(*[8]int, []uint8)) {
 func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 	for _, len := range testLengths {
 		buf := make([]uint16, len+1)
-		buf = buf[1:len+1]	// ensure misalignment
+		buf = buf[1 : len+1] // ensure misalignment
 		for i := range buf {
 			buf[i] = uint16(rand.Int63())
 		}
@@ -90,7 +90,7 @@ func testCount16(t *testing.T, count16 func(*[16]int, []uint16)) {
 func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 	for _, len := range testLengths {
 		buf := make([]uint32, len+1)
-		buf = buf[1:len+1]	// ensure misalignment
+		buf = buf[1 : len+1] // ensure misalignment
 		for i := range buf {
 			buf[i] = rand.Uint32()
 		}
@@ -112,7 +112,7 @@ func testCount32(t *testing.T, count32 func(*[32]int, []uint32)) {
 func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 	for _, len := range testLengths {
 		buf := make([]uint64, len+1)
-		buf = buf[1:len+1]	// ensure misalignment
+		buf = buf[1 : len+1] // ensure misalignment
 		for i := range buf {
 			buf[i] = rand.Uint64()
 		}
