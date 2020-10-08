@@ -250,14 +250,14 @@ func count64generic(counts *[64]int, buf []uint64) {
 		dcba3 := ba1>>2&0x3333333333333333 | dc1&0xcccccccccccccccc
 
 		// split counters for better performance on 32 bit systems
-		dcba0l := uint32(dcba0)
-		dcba0h := uint32(dcba0 >> 32)
-		dcba1l := uint32(dcba1)
-		dcba1h := uint32(dcba1 >> 32)
-		dcba2l := uint32(dcba2)
-		dcba2h := uint32(dcba2 >> 32)
-		dcba3l := uint32(dcba3)
-		dcba3h := uint32(dcba3 >> 32)
+		dcba0l := uint(uint32(dcba0))
+		dcba0h := uint(dcba0 >> 32)
+		dcba1l := uint(uint32(dcba1))
+		dcba1h := uint(dcba1 >> 32)
+		dcba2l := uint(uint32(dcba2))
+		dcba2h := uint(dcba2 >> 32)
+		dcba3l := uint(uint32(dcba3))
+		dcba3h := uint(dcba3 >> 32)
 
 		// add to counters
 		counts[0] += int(dcba0l & 0x0f)
