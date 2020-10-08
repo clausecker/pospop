@@ -116,10 +116,10 @@ func count16generic(counts *[16]int, buf []uint16) {
 		counts[9] += int(dcba2 >> 8 & 0x0f)
 		counts[10] += int(dcba1 >> 8 & 0x0f)
 		counts[11] += int(dcba3 >> 8 & 0x0f)
-		counts[12] += int(dcba0 >> 12 & 0x0f)
-		counts[13] += int(dcba2 >> 12 & 0x0f)
-		counts[14] += int(dcba1 >> 12 & 0x0f)
-		counts[15] += int(dcba3 >> 12 & 0x0f)
+		counts[12] += int(dcba0 >> 12)
+		counts[13] += int(dcba2 >> 12)
+		counts[14] += int(dcba1 >> 12)
+		counts[15] += int(dcba3 >> 12)
 	}
 
 	count16safe(counts, buf[i:len(buf)])
@@ -195,10 +195,10 @@ func count32generic(counts *[32]int, buf []uint32) {
 		counts[25] += int(dcba2 >> 24 & 0x0f)
 		counts[26] += int(dcba1 >> 24 & 0x0f)
 		counts[27] += int(dcba3 >> 24 & 0x0f)
-		counts[28] += int(dcba0 >> 28 & 0x0f)
-		counts[29] += int(dcba2 >> 28 & 0x0f)
-		counts[30] += int(dcba1 >> 28 & 0x0f)
-		counts[31] += int(dcba3 >> 28 & 0x0f)
+		counts[28] += int(dcba0 >> 28)
+		counts[29] += int(dcba2 >> 28)
+		counts[30] += int(dcba1 >> 28)
+		counts[31] += int(dcba3 >> 28)
 	}
 
 	count32safe(counts, buf[i:len(buf)])
@@ -306,10 +306,10 @@ func count64generic(counts *[64]int, buf []uint64) {
 		counts[57] += int(dcba2 >> 56 & 0x0f)
 		counts[58] += int(dcba1 >> 56 & 0x0f)
 		counts[59] += int(dcba3 >> 56 & 0x0f)
-		counts[60] += int(dcba0 >> 60 & 0x0f)
-		counts[61] += int(dcba2 >> 60 & 0x0f)
-		counts[62] += int(dcba1 >> 60 & 0x0f)
-		counts[63] += int(dcba3 >> 60 & 0x0f)
+		counts[60] += int(dcba0 >> 60)
+		counts[61] += int(dcba2 >> 60)
+		counts[62] += int(dcba1 >> 60)
+		counts[63] += int(dcba3 >> 60)
 	}
 
 	count64safe(counts, buf[i:len(buf)])
