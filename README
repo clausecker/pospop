@@ -43,22 +43,32 @@ the system it is running on.
 Performance
 -----------
 
-A buffer size of 100 kB was used.  As all functions are based on the
+As all functions
+(Count8, Count16, Count32, Count64) of one set are based on the
 same kernel with a different accumulation function, they all perform
-equally well.  The following performance table is grouped by the
-instruction set used and the architecture it runs on.
+equally well.  This does not apply to the generic implementations
+whose performance is therefore given for every function individually.
 
-	amd64		386		arm64
-avx512	66,7 GB/s	---		---
-avx2	32.8 GB/s	32.8 GB/s	---
-sse2	16.8 GB/s	16.4 GB/s	---
-neon	---		---		3.81 GB/s
-generic	450 MB/s	450 MB/s	134 MB/s
+The following performance table is grouped by the instruction set used
+and the architecture it runs on.  A buffer size of 100 kB was used to
+find these results.
+
+
+		amd64		386		arm64		arm
+avx512		66.3 GB/s	---		---		---
+avx2		30.9 GB/s	31.6 GB/s	---		---
+sse2		16.0 GB/s	15.6 GB/s	---		---
+neon		---		---		3.81 GB/s	---
+generic8	1.08 GB/s	297 MB/s	253 MB/s	49.0 MB/s
+generic16	1.82 GB/s	1.36 GB/s	445 MB/s	67.1 MB/s
+generic32	2.71 GB/s	2.21 GB/s	620 MB/s	105 MB/s
+generic64	3.60 GB/s	1.89 GB/s	1.04 GB/s	82.9 MB/s
 
 The following systems were used for benchmarks:
 
- * amd64, 386: Intel(R) Xeon(R) W-2133 CPU @ 3.60 GHz
+ * amd64, 386: Intel(R) Xeon(R) Gold 6138 CPU @ 2.00 GHz
  * arm64: ARM Cortex-A72 r0p3 (Raspberry Pi 4B)
+ * arm: ARM Cortex-A7 r0p5 (Raspberry Pi 2B+)
 
 Remaining Work
 --------------
