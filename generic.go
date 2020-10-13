@@ -59,7 +59,12 @@ func count8generic(counts *[8]int, buf []uint8) {
 		counts[7] += int(dcba3 >> 4)
 	}
 
-	count8safe(counts, buf[i:len(buf)])
+	// count8safe() manually inlined
+	for ; i < len(buf); i++ {
+		for j := 0; j < 8; j++ {
+			counts[j] += int(buf[i] >> j & 1)
+		}
+	}
 }
 
 // 16-bit full adder
@@ -126,7 +131,12 @@ func count16generic(counts *[16]int, buf []uint16) {
 		counts[15] += int(dcba3 >> 12)
 	}
 
-	count16safe(counts, buf[i:len(buf)])
+	// count16safe() manually inlined
+	for ; i < len(buf); i++ {
+		for j := 0; j < 16; j++ {
+			counts[j] += int(buf[i] >> j & 1)
+		}
+	}
 }
 
 // 32-bit full adder
@@ -205,7 +215,12 @@ func count32generic(counts *[32]int, buf []uint32) {
 		counts[31] += int(dcba3 >> 28)
 	}
 
-	count32safe(counts, buf[i:len(buf)])
+	// count32safe() manually inlined
+	for ; i < len(buf); i++ {
+		for j := 0; j < 32; j++ {
+			counts[j] += int(buf[i] >> j & 1)
+		}
+	}
 }
 
 // 64-bit full adder
@@ -327,5 +342,10 @@ func count64generic(counts *[64]int, buf []uint64) {
 		counts[63] += int(dcba3h >> 28)
 	}
 
-	count64safe(counts, buf[i:len(buf)])
+	// count64safe() manually inlined
+	for ; i < len(buf); i++ {
+		for j := 0; j < 64; j++ {
+			counts[j] += int(buf[i] >> j & 1)
+		}
+	}
 }
