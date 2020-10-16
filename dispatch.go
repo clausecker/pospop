@@ -1,30 +1,35 @@
 // Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
 
-// Copyright ©2020 Robert Clausecker <fuz@fuz.su>.  All rights reserved.
-
 // Positional population counts.
 //
-// The kernels works on a block size of 240 or 480 bytes (depending on
-// whether AVX2 is available or not).  A buffer size that is a multiple
-// of 480 bytes and at least 10 kB in size is recommended.
+// This package contains a set of functions to compute positional
+// population counts for arrays of uint8, uint16, uint32, or uint64.
+// Optimised assembly optimisations are provided for amd64 (AVX-512,
+// AVX2, SSE2), 386 (AVX2, SSE2), and ARM64 (NEON).  An optimal
+// implementation constrainted by the instruction set extensions
+// available on your CPU is chosen automatically at runtime.  If no
+// assembly implementation exists, a generic fallback implementation
+// will be used.  The pospop package thus works on all architectures
+// supported by the Go toolchain.
 //
-// Right now, kernels exist for Count8 and Count16 on both 386 and amd64
-// with SSE2 or AVX2.  An appropriate implementation is chosen at
-// runtime.  If no kernel is present, a portable (but slow) fallback
-// implementation will be used.
+// The kernels works on a block size of 240, 480, or 960 bytes.  A
+// buffer size that is a multiple of 64 bytes and at least 10 kB in size
+// is recommended.  The author's benchmarks show that a buffer size
+// around 100 kB appears optimal.
 //
-// Further kernels and architectures may be implemented in future
-// versions of this library.  The interface is expected to remain stable.
-
+// See the example on the Count8 function for what the positional
+// population count operation does.
 package pospop
 
 // each platform must provide arrays count8funcs, coun16funcs,
 // count32funcs, and count64funcs of type count8impl, ... listing
 // the available implementations.  The member available indicates that
 // the function would run on this machine.  The dispatch code picks the
-// lowest-numbered function in the array which is available.  The
-// generic implementation should be available under all circumstances.
-// The name should not repeat the "count#" prefix.
+// lowest-numbered function in the array for which available is true.
+// The generic implementation should be available under all
+// circumstances so it can be run by the unit tests.  The name field
+// should be the name of the implementation and should not repeat the
+// "count#" prefix.
 
 type count8impl struct {
 	count8    func(*[8]int, []uint8)
