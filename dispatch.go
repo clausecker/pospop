@@ -50,41 +50,44 @@ type count64impl struct {
 	available bool
 }
 
-// dispatch ids
-var count8id = func() int {
-	for i := range count8funcs {
-		if count8funcs[i].available {
-			return i
+// optimal count8 implementation selected at runtime
+var count8func = func() func(*[8]int, []uint8) {
+	for _, f := range count8funcs {
+		if f.available {
+			return f.count8
 		}
 	}
 
 	panic("no implementation of count8 available")
 }()
 
-var count16id = func() int {
-	for i := range count16funcs {
-		if count16funcs[i].available {
-			return i
+// optimal count16 implementation selected at runtime
+var count16func = func() func(*[16]int, []uint16) {
+	for _, f := range count16funcs {
+		if f.available {
+			return f.count16
 		}
 	}
 
 	panic("no implementation of count16 available")
 }()
 
-var count32id = func() int {
-	for i := range count32funcs {
-		if count32funcs[i].available {
-			return i
+// optimal count32 implementation selected at runtime
+var count32func = func() func(*[32]int, []uint32) {
+	for _, f := range count32funcs {
+		if f.available {
+			return f.count32
 		}
 	}
 
 	panic("no implementation of count32 available")
 }()
 
-var count64id = func() int {
-	for i := range count64funcs {
-		if count64funcs[i].available {
-			return i
+// optimal count64 implementation selected at runtime
+var count64func = func() func(*[64]int, []uint64) {
+	for _, f := range count64funcs {
+		if f.available {
+			return f.count64
 		}
 	}
 
@@ -96,7 +99,7 @@ var count64id = func() int {
 // different place; counts[0] for 0x01, counts[1] for 0x02, and so on to
 // counts[7] for 0x80.
 func Count8(counts *[8]int, buf []uint8) {
-	count8funcs[count8id].count8(counts, buf)
+	count8func(counts, buf)
 }
 
 // Count the number of corresponding set bits of the values in buf and
@@ -104,7 +107,7 @@ func Count8(counts *[8]int, buf []uint8) {
 // different place; counts[0] for 0x0001, counts[1] for 0x0002, and so
 // on to counts[15] for 0x8000.
 func Count16(counts *[16]int, buf []uint16) {
-	count16funcs[count16id].count16(counts, buf)
+	count16func(counts, buf)
 }
 
 // Count the number of corresponding set bits of the values in buf and
@@ -112,7 +115,7 @@ func Count16(counts *[16]int, buf []uint16) {
 // different place; counts[0] for 0x0000001, counts[1] for 0x00000002,
 // and so on to counts[31] for 0x80000000.
 func Count32(counts *[32]int, buf []uint32) {
-	count32funcs[count32id].count32(counts, buf)
+	count32func(counts, buf)
 }
 
 // Count the number of corresponding set bits of the values in buf and
@@ -120,5 +123,5 @@ func Count32(counts *[32]int, buf []uint32) {
 // different place; counts[0] for 0x000000000000001, counts[1] for
 // 0x0000000000000002, and so on to counts[63] for 0x8000000000000000.
 func Count64(counts *[64]int, buf []uint64) {
-	count64funcs[count64id].count64(counts, buf)
+	count64func(counts, buf)
 }
