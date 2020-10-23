@@ -2,11 +2,6 @@
 
 package pospop
 
-// Maximum data length for one iteration of an inner
-// counting function for the generic implementations.
-// Any larger and the 32 bit counters might overflow.
-const genericMaxLen = 1<<16 - 1
-
 // 8-bit full adder
 func csa8(a, b, c uint8) (c_out, s uint8) {
 	s_ab := a ^ b
