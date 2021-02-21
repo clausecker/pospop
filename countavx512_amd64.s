@@ -116,24 +116,6 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 
 	ADDQ $15*64, SI
 
-#define D	45			// prefetch some iterations ahead
-	PREFETCHT0 (D+ 0)*64(SI)
-	PREFETCHT0 (D+ 1)*64(SI)
-	PREFETCHT0 (D+ 2)*64(SI)
-	PREFETCHT0 (D+ 3)*64(SI)
-	PREFETCHT0 (D+ 4)*64(SI)
-	PREFETCHT0 (D+ 5)*64(SI)
-	PREFETCHT0 (D+ 6)*64(SI)
-	PREFETCHT0 (D+ 7)*64(SI)
-	PREFETCHT0 (D+ 8)*64(SI)
-	PREFETCHT0 (D+ 9)*64(SI)
-	PREFETCHT0 (D+10)*64(SI)
-	PREFETCHT0 (D+11)*64(SI)
-	PREFETCHT0 (D+12)*64(SI)
-	PREFETCHT0 (D+13)*64(SI)
-	PREFETCHT0 (D+14)*64(SI)
-	PREFETCHT0 (D+15)*64(SI)
-
 	// group nibbles in Z0, Z1, Z2, and Z3 into Z4, Z5, Z6, and Z7
 	VPSRLD $1, Z0, Z4
 	VPADDD Z1, Z1, Z5

@@ -147,15 +147,6 @@ vec:	VMOVDQU 0*32(SI), Y0		// load 480 bytes from buf
 	VPADDD Y7, Y7, Y6		// 0xaaaaaaaa
 
 	ADDL $15*32, SI
-#define D	75			// prefetch some iterations ahead
-	PREFETCHT0 (D+ 0)*32(SI)
-	PREFETCHT0 (D+ 2)*32(SI)
-	PREFETCHT0 (D+ 4)*32(SI)
-	PREFETCHT0 (D+ 6)*32(SI)
-	PREFETCHT0 (D+ 8)*32(SI)
-	PREFETCHT0 (D+10)*32(SI)
-	PREFETCHT0 (D+12)*32(SI)
-	PREFETCHT0 (D+14)*32(SI)
 
 	// group Y0--Y3 into nibbles in the same registers
 	VPAND Y0, Y6, Y5

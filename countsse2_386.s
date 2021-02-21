@@ -170,11 +170,6 @@ vec:	MOVOA 0*16(SI), X0		// load 240 bytes from buf
 	PSHUFD $0x00, X7, X7		// 0x55555555
 
 	ADDL $15*16, SI
-#define D	90
-	PREFETCHT0 (D+ 0)*16(SI)
-	PREFETCHT0 (D+ 4)*16(SI)
-	PREFETCHT0 (D+ 8)*16(SI)
-	PREFETCHT0 (D+12)*16(SI)
 
 	// group X0--X3 into nibbles in the same register
 	MOVOA X0, X5

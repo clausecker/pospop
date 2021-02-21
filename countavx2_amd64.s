@@ -139,15 +139,6 @@ vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
 	CSA(Y2, Y3, Y4, Y7)
 
 	ADDQ $15*32, SI
-#define D	75			// prefetch some iterations ahead
-	PREFETCHT0 (D+ 0)*32(SI)
-	PREFETCHT0 (D+ 2)*32(SI)
-	PREFETCHT0 (D+ 4)*32(SI)
-	PREFETCHT0 (D+ 6)*32(SI)
-	PREFETCHT0 (D+ 8)*32(SI)
-	PREFETCHT0 (D+10)*32(SI)
-	PREFETCHT0 (D+12)*32(SI)
-	PREFETCHT0 (D+14)*32(SI)
 
 	// group nibbles in Y0, Y1, Y2, and Y3 into Y4, Y5, Y6, and Y7
 	VPADDD Y15, Y15, Y12		// 0xaaaaaaaa
