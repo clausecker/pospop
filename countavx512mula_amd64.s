@@ -89,7 +89,9 @@ nohead:	VPUNPCKLBW Z25, Z0, Z8
 	VPUNPCKHBW Z25, Z0, Z9
 
 	SUBQ $15*64, CX			// enough data left to process?
-	JLT endvec
+	LEAQ -64(CX), DX		// if not, adjust CX
+	CMOVQLT DX, CX
+	JLT endvec			// and go to endvec
 
 	VPBROADCASTD magic<>+16(SB), Z28 // 0x55555555 for transposition
 	VPBROADCASTD magic<>+20(SB), Z27 // 0x33333333 for transposition
@@ -130,7 +132,7 @@ nohead:	VPUNPCKLBW Z25, Z0, Z8
 	JLT post
 
 	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff for transposition
-	VPMOVZXBW magic<>+32(SB), Z2	// transposition vector
+	VPMOVZXBW magic<>+32(SB), Z23	// transposition vector
 
 	// load 1024 bytes from buf, add them to Z0..Z3 into Z0..Z4
 vec:	VMOVDQA64 0*64(SI), Z4
@@ -164,6 +166,8 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	CSA(Z1, Z10, Z12, Z22)
 	CSA(Z2, Z5, Z10, Z22)
 	CSA(Z3, Z4, Z5, Z22)
+
+	ADDQ $16*64, SI
 
 	// now Z0..Z4 hold counters; preserve Z0..Z3 for next round and
 	// add Z4 to counters.
@@ -205,7 +209,6 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	VPADDW Z5, Z8, Z8
 	VPADDW Z6, Z9, Z9
 
-	// ...
 	SUBL $16*8, AX			// account for possible overflow
 	CMPL AX, $16*8			// enough space left in the counters?
 	JGE have_space
