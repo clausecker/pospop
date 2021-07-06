@@ -1,7 +1,7 @@
 #include "textflag.h"
 
-// An AVX512 based kerenl combining the Muła et al algorithm with our
-// postprocessing approach.
+// An AVX512 based kernel carrying over place-value vectors
+// between iterations.
 // Required CPU extensions: BMI2, AVX-512 -F, -BW.
 
 // magic constants
@@ -34,7 +34,7 @@ GLOBL magic<>(SB), RODATA|NOPTR, $64
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and a remaining length in BP.
-TEXT countavx512mula<>(SB), NOSPLIT, $0-0
+TEXT countavx512carry<>(SB), NOSPLIT, $0-0
 	TESTQ CX, CX			// any data to process at all?
 	CMOVQEQ CX, SI			// if not, avoid loading head
 
@@ -473,41 +473,41 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 
 	RET
 
-// func count8avx512mula(counts *[8]int, buf []uint8)
-TEXT ·count8avx512mula(SB), 0, $0-32
+// func count8avx512carry(counts *[8]int, buf []uint8)
+TEXT ·count8avx512carry(SB), 0, $0-32
 	MOVQ counts+0(FP), DI
 	MOVQ buf_base+8(FP), SI
 	MOVQ buf_len+16(FP), CX
 	MOVQ $accum8<>(SB), BX
-	CALL countavx512mula<>(SB)
+	CALL countavx512carry<>(SB)
 	RET
 
-// func count16avx512mula(counts *[16]int, buf []uint16)
-TEXT ·count16avx512mula(SB), 0, $0-32
+// func count16avx512carry(counts *[16]int, buf []uint16)
+TEXT ·count16avx512carry(SB), 0, $0-32
 	MOVQ counts+0(FP), DI
 	MOVQ buf_base+8(FP), SI
 	MOVQ buf_len+16(FP), CX
 	MOVQ $accum16<>(SB), BX
 	SHLQ $1, CX
-	CALL countavx512mula<>(SB)
+	CALL countavx512carry<>(SB)
 	RET
 
-// func count32avx512mula(counts *[32]int, buf []uint32)
-TEXT ·count32avx512mula(SB), 0, $0-32
+// func count32avx512carry(counts *[32]int, buf []uint32)
+TEXT ·count32avx512carry(SB), 0, $0-32
 	MOVQ counts+0(FP), DI
 	MOVQ buf_base+8(FP), SI
 	MOVQ buf_len+16(FP), CX
 	MOVQ $accum32<>(SB), BX
 	SHLQ $2, CX
-	CALL countavx512mula<>(SB)
+	CALL countavx512carry<>(SB)
 	RET
 
-// func count64avx512mula(counts *[64]int, buf []uint64)
-TEXT ·count64avx512mula(SB), 0, $0-32
+// func count64avx512carry(counts *[64]int, buf []uint64)
+TEXT ·count64avx512carry(SB), 0, $0-32
 	MOVQ counts+0(FP), DI
 	MOVQ buf_base+8(FP), SI
 	MOVQ buf_len+16(FP), CX
 	MOVQ $accum64<>(SB), BX
 	SHLQ $3, CX
-	CALL countavx512mula<>(SB)
+	CALL countavx512carry<>(SB)
 	RET
