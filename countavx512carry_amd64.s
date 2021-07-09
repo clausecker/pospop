@@ -1,7 +1,8 @@
 #include "textflag.h"
 
-// An AVX512 based kernel carrying over place-value vectors
-// between iterations.
+// An AVX512 based kernel first doing a 15-fold CSA reduction
+// and then a 16-fold CSA reduction, carrying over place-value
+// vectors between iterations.
 // Required CPU extensions: BMI2, AVX-512 -F, -BW.
 
 // magic constants
@@ -33,7 +34,7 @@ GLOBL magic<>(SB), RODATA|NOPTR, $64
 
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
-// counters in DI and a remaining length in BP.
+// counters in DI and an array length in CX.
 TEXT countavx512carry<>(SB), NOSPLIT, $0-0
 	TESTQ CX, CX			// any data to process at all?
 	CMOVQEQ CX, SI			// if not, avoid loading head
@@ -93,12 +94,6 @@ nohead:	VPUNPCKLBW Z25, Z0, Z8
 	CMOVQLT DX, CX
 	JLT endvec			// and go to endvec
 
-	VPBROADCASTD magic<>+16(SB), Z28 // 0x55555555 for transposition
-	VPBROADCASTD magic<>+20(SB), Z27 // 0x33333333 for transposition
-	VPBROADCASTD magic<>+24(SB), Z26 // 0x0f0f0f0f for transposition
-
-	MOVL $65535-8, AX		// space left til overflow could occur in Z8, Z9
-
 	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VMOVDQA64 1*64(SI), Z1		// and sum them into Z3:Z2:Z1:Z0
 	VMOVDQA64 2*64(SI), Z4
@@ -122,17 +117,22 @@ nohead:	VPUNPCKLBW Z25, Z0, Z8
 	VMOVDQA64 13*64(SI), Z4
 	CSA(Z0, Z5, Z6, Z7)
 	VMOVDQA64 14*64(SI), Z6
+
+	VPBROADCASTD magic<>+16(SB), Z28 // 0x55555555 for transposition
+	VPBROADCASTD magic<>+20(SB), Z27 // 0x33333333 for transposition
+	VPBROADCASTD magic<>+24(SB), Z26 // 0x0f0f0f0f for transposition
+
 	CSA(Z0, Z4, Z6, Z7)
 	CSA(Z1, Z4, Z5, Z7)
 	CSA(Z2, Z3, Z4, Z7)
 
 	ADDQ $15*64, SI
-
 	SUBQ $16*64, CX			// enough data left to process?
 	JLT post
 
-	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff for transposition
+	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff
 	VPMOVZXBW magic<>+32(SB), Z23	// transposition vector
+	MOVL $65535-8, AX		// space left til overflow could occur in Z8, Z9
 
 	// load 1024 bytes from buf, add them to Z0..Z3 into Z0..Z4
 vec:	VMOVDQA64 0*64(SI), Z4
@@ -173,8 +173,8 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	// add Z4 to counters.
 
 	// split into even/odd and reduce into crumbs
-	VPANDD Z4, Z28, Z5		// Z5 = bits 02468ace02468ace
-	VPANDND Z4, Z28, Z6		// Z6 = bits 13579bdf13579bdf
+	VPANDD Z4, Z28, Z5		// Z5 = bits 02468ace x32
+	VPANDND Z4, Z28, Z6		// Z6 = bits 13579bdf x32
 	VPSRLD $1, Z6, Z6
 	VSHUFI64X2 $0x44, Z6, Z5, Z10
 	VSHUFI64X2 $0xee, Z6, Z5, Z11

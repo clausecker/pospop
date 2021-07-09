@@ -23,7 +23,7 @@ GLOBL magic<>(SB), RODATA|NOPTR, $28
 
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
-// counters in DI and a remaining length in BP.
+// counters in DI and an array length in CX.
 TEXT countavx512<>(SB), NOSPLIT, $0-0
 	TESTQ CX, CX			// any data to process at all?
 	CMOVQEQ CX, SI			// if not, avoid loading head
