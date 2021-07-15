@@ -244,8 +244,6 @@ have_space:
 	// group nibbles in Y0, Y1, Y2, and Y3 into Y4, Y5, Y6, and Y7
 post:	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f
 
-	VPADDD Y15, Y15, Y12		// 0xaaaaaaaa
-
 	VPAND Y1, Y15, Y5
 	VPADDD Y5, Y5, Y5
 	VPAND Y3, Y15, Y7
@@ -255,16 +253,14 @@ post:	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f
 	VPOR Y4, Y5, Y4			// Y4 = eca86420 (low crumbs)
 	VPOR Y6, Y7, Y5			// Y5 = eca86420 (high crumbs)
 
-	VPAND Y0, Y12, Y0
+	VPANDN Y0, Y15, Y0
 	VPSRLD $1, Y0, Y0
-	VPAND Y2, Y12, Y2
+	VPANDN Y2, Y15, Y2
 	VPSRLD $1, Y2, Y2
-	VPAND Y1, Y12, Y1
-	VPAND Y3, Y12, Y3
+	VPANDN Y1, Y15, Y1
+	VPANDN Y3, Y15, Y3
 	VPOR Y0, Y1, Y6			// Y6 = fdb97531 (low crumbs)
 	VPOR Y2, Y3, Y7			// Y7 = fdb97531 (high crumbs)
-
-	VPSLLD $2, Y13, Y12		// 0xcccccccc
 
 	VPAND Y5, Y13, Y1
 	VPSLLD $2, Y1, Y1
@@ -275,12 +271,12 @@ post:	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f
 	VPOR Y0, Y1, Y0			// Y0 = c840
 	VPOR Y2, Y3, Y1			// Y1 = d951
 
-	VPAND Y4, Y12, Y4
+	VPANDN Y4, Y13, Y4
 	VPSRLD $2, Y4, Y4
-	VPAND Y6, Y12, Y6
+	VPANDN Y6, Y13, Y6
 	VPSRLD $2, Y6, Y6
-	VPAND Y5, Y12, Y5
-	VPAND Y7, Y12, Y7
+	VPANDN Y5, Y13, Y5
+	VPANDN Y7, Y13, Y7
 	VPOR Y4, Y5, Y2			// Y2 = ea62
 	VPOR Y6, Y7, Y3			// Y3 = fb73
 
