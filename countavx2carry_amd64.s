@@ -222,7 +222,7 @@ vec:	VMOVDQA 0*32(SI), Y4
 	VPSRLD $8, Y4, Y4		// Y4 = 89abcdef[0:1]
 	VPSRLD $8, Y5, Y5		// Y5 = 89abcdef[2:3]
 	VPADDW Y4, Y9, Y9
-	VPADDW Y5, Y10, Y10
+	VPADDW Y5, Y11, Y11
 
 	SUBL $16*4, AX			// account for possible overflow
 	CMPL AX, $16*4			// enough space left in the counters?
