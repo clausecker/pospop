@@ -139,7 +139,7 @@ nohead:	VPUNPCKLBW Y7, Y0, Y8		// 01234567[0:1]
 	CSA(Y2, Y3, Y4, Y7)
 
 	ADDQ $15*32, SI
-	SUBQ $16*64, CX			// enough data left to process?
+	SUBQ $16*32, CX			// enough data left to process?
 	JLT post
 
 	// load 512 bytes from buf, add them to Y0..Y3 into Y0..Y4

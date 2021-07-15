@@ -59,8 +59,8 @@ var count32funcs = []count32impl{
 }
 
 var count64funcs = []count64impl{
-//	{count64avx512carry, "avx512carry", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
-//	{count64avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
+	{count64avx512carry, "avx512carry", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
+	{count64avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
 	{count64avx2carry, "avx2carry", cpu.X86.HasAVX2},
 	{count64avx2, "avx2", cpu.X86.HasAVX2},
 	{count64sse2, "sse2", cpu.X86.HasSSE2},
