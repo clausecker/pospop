@@ -185,7 +185,7 @@ vec:	VMOVDQA 0*32(SI), Y4
 
 	// split into even/odd and reduce into crumbs
 	VPAND Y4, Y15, Y5		// Y5 = 02468ace x16
-	VPANDND Y4, Y15, Y6		// Y6 = 13579bdf x16
+	VPANDN Y4, Y15, Y6		// Y6 = 13579bdf x16
 	VPSRLD $1, Y6, Y6
 	VPERM2I128 $0x20, Y6, Y5, Y4
 	VPERM2I128 $0x31, Y6, Y5, Y5
