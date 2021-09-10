@@ -124,7 +124,7 @@ nohead:	VUXTL V8.B8, V9.H8		//  8--15  89abcdef[0]
 	CSA(V1, V4, V6)
 	CSA(V2, V3, V4)
 
-	SUBS $15*16, R3, R3		// enough data left to process?
+	SUBS $16*16, R3, R3		// enough data left to process?
 	BLT post
 
 	// load 16 registers worth of data and accumulate into V4--V0
@@ -144,7 +144,7 @@ vec:	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 	CSA(V1, V4, V20)
 	CSA(V0, V17, V19)
 	CSA(V2, V5, V18)
-	CSA(V1, V16, V19)
+	CSA(V1, V16, V17)
 	CSA(V2, V4, V16)
 	CSA(V3, V4, V5)
 
@@ -152,27 +152,27 @@ vec:	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 	// add V4 to counters.
 
 	// split into even/odd and reduce into crumbs
-	VAND V4.B16, V27.B16, V5.B16	// Z5 = bits 02468ace x8
-//	VBIC V4.B16, V27.B16, V6.B16	// Z6 = bits 13579bdf x8
-	WORD $0x4e641f66
+	VAND V27.B16, V4.B16, V5.B16	// V5 = bits 02468ace x8
+//	VBIC V27.B16, V4.B16, V6.B16	// V6 = bits 13579bdf x8
+	WORD $0x4e7b1c86
 	VUSHR $1, V6.B16, V6.B16
 	VZIP1 V6.D2, V5.D2, V4.D2
 	VZIP2 V6.D2, V5.D2, V5.D2
 	VADD V5.B16, V4.B16, V4.B16	// V4 = 02468ace x4 13579bdf x4
 
 	// split again into nibbles
-	VAND V4.B16, V26.B16, V5.B16	// V5 = 048c x4 159d x4
-//	VBIC V4.B16, V26.B16, V6.B16	// V6 = 26ae x4 37bf x4
-	WORD $0x4e641f46
+	VAND V26.B16, V4.B16, V5.B16	// V5 = 048c x4 159d x4
+//	VBIC V26.B16, V4.B16, V6.B16	// V6 = 26ae x4 37bf x4
+	WORD $0x4e7a1c86
 	VUSHR $2, V6.B16, V6.B16
 
 	// split again into bytes and shuffle into order (also scale)
-	VAND V5.B16, V25.B16, V4.B16	// V4 = 08 x4 19 x4
-//	VBIC V5.B16, V25.B16, V5.B16	// V5 = 4c x4 5d x4
-	WORD $0x4e651f25
-//	VBIC V6.B16, V25.B16, V7.B16	// V7 = 6e x4 7f x4
-	WORD $0x4e661f27
-	VAND V6.B16, V25.B16, V6.B16	// V6 = 2a x4 3b x4
+	VAND V25.B16, V5.B16, V4.B16	// V4 = 08 x4 19 x4
+//	VBIC V25.B16, V5.B16, V5.B16	// V5 = 4c x4 5d x4
+	WORD $0x4e791ca5
+//	VBIC V25.B16, V6.B16, V7.B16	// V7 = 6e x4 7f x4
+	WORD $0x4e791cc7
+	VAND V25.B16, V6.B16, V6.B16	// V6 = 2a x4 3b x4
 	VSHL $4, V4.B16, V4.B16
 	VSHL $4, V6.B16, V6.B16
 
@@ -193,12 +193,12 @@ vec:	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 
 	// add to counters
 	VUADDW V16.B8, V8.H8, V8.H8
-	VUADDW2 V17.B16, V9.H8, V9.H8
-	VUADDW V16.B8, V10.H8, V10.H8
+	VUADDW2 V16.B16, V9.H8, V9.H8
+	VUADDW V17.B8, V10.H8, V10.H8
 	VUADDW2 V17.B16, V11.H8, V11.H8
 	VUADDW V18.B8, V12.H8, V12.H8
-	VUADDW2 V19.B16, V13.H8, V13.H8
-	VUADDW V18.B8, V14.H8, V14.H8
+	VUADDW2 V18.B16, V13.H8, V13.H8
+	VUADDW V19.B8, V14.H8, V14.H8
 	VUADDW2 V19.B16, V15.H8, V15.H8
 
 	SUB $15*2, R6, R6		// account for possible overflow
@@ -243,9 +243,9 @@ post:	VUSHR $1, V0.B16, V4.B16
 
 	// pre-shuffle nibbles
 	VZIP1 V3.B16, V2.B16, V6.B16	// V6 = fbea7362 (3:2:1:0)
-	VZIP2 V3.B16, V2.B16, V3.B16	// V1 = fbea7362 (7:6:5:4)
+	VZIP2 V3.B16, V2.B16, V3.B16	// V3 = fbea7362 (7:6:5:4)
 	VZIP1 V1.B16, V0.B16, V5.B16	// V5 = d9c85140 (3:2:1:0)
-	VZIP2 V1.B16, V0.B16, V2.B16	// V0 = d9c85140 (7:6:5:4)
+	VZIP2 V1.B16, V0.B16, V2.B16	// V2 = d9c85140 (7:6:5:4)
 	VZIP1 V6.H8, V5.H8, V4.H8	// V4 = fbead9c873625140 (1:0)
 	VZIP2 V6.H8, V5.H8, V5.H8	// V5 = fbead9c873625140 (3:2)
 	VZIP1 V3.H8, V2.H8, V6.H8	// V6 = fbead9c873625150 (5:4)
