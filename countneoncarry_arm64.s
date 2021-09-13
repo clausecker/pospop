@@ -40,9 +40,6 @@ GLOBL magic<>(SB), RODATA|NOPTR, $40
 // accumulation function in R0, a possibly unaligned input buffer in R1,
 // counters in R2 and a remaining length in R3.
 TEXT countneoncarry<>(SB), NOSPLIT, $0-0
-	TST R3, R3			// any data to process at all?
-	CSEL EQ, ZR, R1, R1		// if yes, avoid loading head
-
 	// constant for processing the head
 	MOVD $magic<>(SB), R4
 	VLD1R.P 8(R4), [V28.D2]		// 80402010080402018040201008040201
@@ -54,6 +51,9 @@ TEXT countneoncarry<>(SB), NOSPLIT, $0-0
 	VMOVI $0, V12.B16
 	VMOVI $0, V14.B16
 
+	CMP $15*16, R3			// is the CSA kernel worth using?
+	BLT runt
+
 	// load head until alignment/end is reached
 	AND $15, R1, R5			// offset of the buffer start from 16 byte alignment
 	CBZ R5, nohead			// if source buffer is aligned skip head processing
@@ -64,18 +64,8 @@ TEXT countneoncarry<>(SB), NOSPLIT, $0-0
 //	VMOVQ (R4)(R5), V5		// load mask of bytes that are part of the head
 	WORD $0x3ce56885
 	VAND V5.B16, V3.B16, V3.B16	// and mask out those bytes that are not
-	CMP R3, R5			// is the head shorter than the buffer?
-	BLT norunt
 
-	// buffer is short and does not cross a 16 byte boundary
-	SUB R3, R5, R5			// number of bytes by which we overshoot the buffer
-//	VMOVQ (R4)(R5), V5		// load mask of bytes that overshoot the buffer
-	WORD $0x3ce56885
-//	VBIC V5.B16, V3.B16, V3.B16	// and clear them
-	WORD $0x4e651c63
-	MOVD R5, R3			// set up true prefix length
-
-norunt:	SUB R5, R3, R3			// mark head as accounted for
+	SUB R5, R3, R3			// mark head as accounted for
 
 	// process head in increments of 2 bytes
 	COUNT4(V8, V10, V3)
@@ -288,7 +278,6 @@ endvec:	VMOVI $0, V0.B16		// counter registers
 	ADDS $16*16-8, R3, R3		// 8 bytes left to process?
 	BLT tail1
 
-
 tail8:	SUBS $8, R3
 	FMOVS.P 4(R1), F6
 	FMOVS.P 4(R1), F7
@@ -296,7 +285,7 @@ tail8:	SUBS $8, R3
 	COUNT4(V2, V3, V7)
 	BGE tail8
 
-	// process remaining 0--7 byte
+	// process remaining 0--7 bytes
 tail1:	ADDS $8, R3			// anything left to process?
 	BLE end
 
@@ -320,6 +309,61 @@ end:	VUADDW V0.B8, V9.H8, V9.H8
 	VUADDW2 V2.B16, V12.H8, V12.H8
 	VUADDW V3.B8, V15.H8, V15.H8
 	VUADDW2 V3.B16, V14.H8, V14.H8
+
+	CALL *R0
+	RET
+
+	// very short input, use tail routine only
+runt:	SUBS $8, R3			// 8 bytes left to process?
+	BLT runt1
+
+	// process runt, 8 bytes at a time
+runt8:	SUBS $8, R3
+	FMOVS.P 4(R1), F6
+	FMOVS.P 4(R1), F7
+	COUNT4(V8, V10, V6)
+	COUNT4(V12, V14, V7)
+	BGE runt8
+
+	// process remaining 0--7 bytes
+	// while making sure we don't get a page fault
+runt1:	ADDS $8, R3			// anything left to process?
+	BLE runt_accum
+
+	AND $7, R1, R5			// offset from 8 byte alignment
+	ADD R5, R3, R8			// length of buffer including alignment
+	LSL $3, R3, R3			// remaining length in bits
+	MOVD $-1, R7
+	LSL R3, R7, R7			// mask of bits where R6 is out of range
+	CMP $8, R8			// if this exceeds an alignment boundary
+	BGE crossrunt1			// we can safely load directly
+
+	AND $~7, R1, R1			// align buffer to 8 bytes
+	MOVD (R1), R6			// and load 8 bytes from buffer
+	LSL $3, R5, R5			// offset from 8 byte alignment in bits
+	LSR R5, R6, R6			// buffer starting at the beginning
+	B dorunt1
+
+crossrunt1:
+	MOVD (R1), R6			// load 8 bytes from unaligned buffer
+
+dorunt1:
+	BIC R7, R6, R6			// clear out of range bits
+	FMOVD R6, F6			// move buffer to SIMD unit
+	VEXT $4, V6.B16, V6.B16, V7.B16
+	COUNT4(V8, V10, V6)
+	COUNT4(V12, V14, V7)
+
+	// initialise counters with tail
+runt_accum:
+	VUXTL V8.B8, V9.H8		//  8--15  89abcdef[0]
+	VUXTL2 V8.B16, V8.H8		//  0-- 7  01234567[0]
+	VUXTL V10.B8, V11.H8		// 24--31  89abcdef[1]
+	VUXTL2 V10.B16, V10.H8		// 16--23  01234567[1]
+	VUXTL V12.B8, V13.H8		// 40--47  89abcdef[2]
+	VUXTL2 V12.B16, V12.H8		// 32--39  01234567[2]
+	VUXTL V14.B8, V15.H8		// 56--63  89abcdef[3]
+	VUXTL2 V14.B16, V14.H8		// 48--55  01234567[3]
 
 	CALL *R0
 	RET
