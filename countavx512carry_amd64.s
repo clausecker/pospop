@@ -36,9 +36,6 @@ GLOBL magic<>(SB), RODATA|NOPTR, $64
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and an array length in CX.
 TEXT countavx512carry<>(SB), NOSPLIT, $0-0
-	TESTQ CX, CX			// any data to process at all?
-	CMOVQEQ CX, SI			// if not, avoid loading head
-
 	// head and tail constants, counter registers
 	VMOVQ magic<>+0(SB), X1		// 0706050403020100
 	VPBROADCASTQ magic<>+8(SB), Z31	// 8040201008040201
@@ -53,16 +50,15 @@ TEXT countavx512carry<>(SB), NOSPLIT, $0-0
 	VPMOVZXDQ Y1, Z1		// -7:-6:-5:-4:-3:-2:-1:-0
 	VPSHUFD $0xa0, Z1, Z29		// 77:66:55:44:33:22:11:00
 
+	CMPQ CX, $15*64			// is the CSA kernel worth using?
+	JLT runt
+
 	// compute misalignment mask
 	MOVL SI, DX
 	ANDL $63, DX			// offset of the buffer start from 64 byte alignment
 	JEQ nohead
 	MOVQ $-1, R8
 	SUBQ DX, SI			// align source to 64 byte
-	SHLXQ CX, R8, R9		// mask with CX low order bits clear
-	NOTQ R9				// mask with CX low order bits set
-	CMPQ CX, $64			// does the buffer reach the end of the 64 byte load?
-	CMOVQLT R9, R8			// mask with min(CX, 64) low order bits set
 	SHLXQ DX, R8, R8		// mask out the head of the load
 	KMOVQ R8, K1			// prepare mask register
 	VMOVDQU8.Z (SI), K1, Z4		// load head with mask
@@ -312,7 +308,7 @@ tail8:	VPBROADCASTQ (SI), Z4
 	SUBL $8, CX
 	VPTESTMB Z31, Z4, K1
 	VPSUBB Z30, Z0, K1, Z0
-	JGE tail8
+	JGT tail8
 
 	// process remaining 0--7 bytes
 tail1:	SUBL $-8, CX
@@ -335,6 +331,38 @@ end:	VPUNPCKLBW Z25, Z0, Z1
 	VPADDW Z2, Z9, Z9
 
 	// and perform a final accumulation
+	CALL *BX
+	VZEROUPPER
+	RET
+
+	// special processing for when the data is less than
+	// one iteration of the kernel
+runt:	SUBL $8, CX			// 8 bytes left to process?
+	JLT runt1
+
+runt8:	VPBROADCASTQ (SI), Z4
+	ADDQ $8, SI
+	VPSHUFB Z29, Z4, Z4
+	SUBL $8, CX
+	VPTESTMB Z31, Z4, K1
+	VPSUBB Z30, Z0, K1, Z0
+	JGE runt8
+
+	// process remaining 0--8 bytes
+runt1:	ADDL $8, CX
+	XORL AX, AX
+	BTSL CX, AX			// 1 << CX
+	DECL AX				// mask of CX ones
+	KMOVD AX, K1
+	VMOVDQU8.Z (SI), K1, X4
+	VPBROADCASTQ X4, Z4
+	VPSHUFB Z29, Z4, Z4
+	VPTESTMB Z31, Z4, K1
+	VPSUBB Z30, Z0, K1, Z0
+
+	// populate counters and accumulate
+runt0:	VPUNPCKLBW Z25, Z0, Z8
+	VPUNPCKHBW Z25, Z0, Z9
 	CALL *BX
 	VZEROUPPER
 	RET
