@@ -37,10 +37,25 @@ GLOBL window<>(SB), RODATA|NOPTR, $64
 	VPXOR A, C, A \
 	VPOR  B, D, B
 
+// count 4 bytes from L and 4 bytes from H into Y0 and Y1,
+// using Y4, and Y5 for scratch space
+#define COUNT8(L, H) \
+	VPBROADCASTD L, Y4 \	// Y4 = 3210:3210:3210:3210:3210:3210:3210:3210
+	VPBROADCASTD H, Y5 \
+	VPSHUFB Y3, Y4, Y4 \	// Y4 = 3333:3333:2222:2222:1111:1111:0000:0000
+	VPSHUFB Y3, Y5, Y5 \
+	VPAND Y2, Y4, Y4 \	// mask out one bit in each copy of the bytes
+	VPAND Y2, Y5, Y5 \
+	VPCMPEQB Y2, Y4, Y4 \	// set bytes to -1 if the bits were set
+	VPCMPEQB Y2, Y5, Y5 \	// or to 0 otherwise
+	VPSUBB Y4, Y0, Y0 \	// add 1/0 (subtract -1/0) to counters
+	VPSUBB Y5, Y1, Y1
+
+
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and a remaining length in CX.
-TEXT countavxcarry<>(SB), NOSPLIT, $32-0
+TEXT countavxcarry<>(SB), NOSPLIT, $0-0
 	// constants for processing the head and tail
 	VPBROADCASTQ magic<>+32(SB), Y2	// bit position mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
@@ -57,33 +72,28 @@ TEXT countavxcarry<>(SB), NOSPLIT, $32-0
 	JEQ nohead			// if source buffer is aligned, skip head processing
 	MOVL $32, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
-	VMOVDQA -32(SI)(AX*1), Y4	// load head
+	VMOVDQA -32(SI)(AX*1), Y6	// load head
 	LEAQ window<>(SB), DX		// load window mask base pointer
-	VPAND (DX)(AX*1), Y4, Y4	// mask out bytes not in head
+	VPAND (DX)(AX*1), Y6, Y6	// mask out bytes not in head
 	VMOVDQU Y4, scratch-32(SP)	// copy to scratch space
 	SUBQ AX, CX			// mark head as accounted for
-	MOVL SI, DX			// keep a copy of the head pointer
 	ADDQ AX, SI			// and advance past head
 
-	ANDL $31, DX			// compute misalignment again
-	SHRL $3, DX			// misalignment in qwords (rounded down)
-	ANDL $3, DX			// and reduced to range 0--3
+	// process head, 8 bytes at a time
+	VPSRLDQ $4, X6, X5
+	COUNT8(X6, X5)
 
-	// process head, 8 bytes at a time (up to 4 times)
-head:	VPBROADCASTD scratch-32+0(SP)(DX*8), Y4
-					// Y4 = 3210:3210:3210:3210:3210:3210:3210:3210
-	VPBROADCASTD scratch-32+4(SP)(DX*8), Y5
-	INCL DX
-	VPSHUFB Y3, Y4, Y4		// Y4 = 3333:3333:2222:2222:1111:1111:0000:0000
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4		// mask out one bit in each copy of the bytes
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4		// set bytes to -1 if the bits were set
-	VPCMPEQB Y2, Y5, Y5		// or to 0 otherwise
-	VPSUBB Y4, Y0, Y0		// add 1/0 (subtract -1/0) to counters
-	VPSUBB Y5, Y1, Y1
-	CMPL DX, $4			// have we processed the full head?
-	JLT head
+	VPSRLDQ $12, X6, X5
+	VPERMQ $0x39, Y6, Y6		// rotate Y6 right by a qword
+	COUNT8(X6, X5)
+
+	VPSRLDQ $12, X6, X5
+	VPERMQ $0x39, Y6, Y6		// rotate Y6 right by a qword
+	COUNT8(X6, X5)
+
+	VPSRLDQ $12, X6, X5
+	VPERMQ $0x39, Y6, Y6		// rotate Y6 right by a qword
+	COUNT8(X6, X5)
 
 	// initialise counters to what we have
 nohead:	VPUNPCKLBW Y7, Y0, Y8		// 01234567[0:1]
@@ -333,17 +343,8 @@ endvec:	VPBROADCASTQ magic<>+32(SB), Y2	// byte mask
 	SUBL $8-16*32, CX		// 8 bytes left to process?
 	JLT tail1
 
-tail8:	VPBROADCASTD 0(SI), Y4
-	VPBROADCASTD 4(SI), Y5
+tail8:	COUNT8(0(SI), 4(SI))
 	ADDQ $8, SI
-	VPSHUFB Y3, Y4, Y4
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4
-	VPCMPEQB Y2, Y5, Y5
-	VPSUBB Y4, Y0, Y0
-	VPSUBB Y5, Y1, Y1
 	SUBL $8, CX
 	JGE tail8
 
@@ -351,24 +352,14 @@ tail8:	VPBROADCASTD 0(SI), Y4
 tail1:	SUBL $-8, CX			// anything left to process?
 	JLE end
 
-	VMOVQ (SI), X5			// load 8 byte from buffer.  This is ok
+	VMOVQ (SI), X6			// load 8 byte from buffer.  This is ok
 					// as buffer is aligned to 8 byte here
 	MOVQ $window<>+32(SB), AX	// load window address
 	SUBQ CX, AX			// adjust mask pointer
-	VMOVQ (AX), X6			// load window mask
-	VPANDN X5, X6, X5		// and mask out the desired bytes
-
-	VPBROADCASTD X5, Y4
-	VPSRLDQ $4, X5, X5
-	VPBROADCASTD X5, Y5
-	VPSHUFB Y3, Y4, Y4
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4
-	VPCMPEQB Y2, Y5, Y5
-	VPSUBB Y4, Y0, Y0
-	VPSUBB Y5, Y1, Y1
+	VMOVQ (AX), X5			// load window mask
+	VPANDN X6, X5, X6		// and mask out the desired bytes
+	VPSRLDQ $4, X6, X5		// obtain second dword in X5
+	COUNT8(X6, X5)
 
 	// add tail to counters
 end:	VPXOR Y7, Y7, Y7
@@ -393,17 +384,8 @@ runt:	SUBL $8, CX			// 8 byte left to process?
 	JLT runt1
 
 	// process runt, 8 bytes at a time
-runt8:	VPBROADCASTD 0(SI), Y4
-	VPBROADCASTD 4(SI), Y5
+runt8:	COUNT8(0(SI), 4(SI))
 	ADDQ $8, SI
-	VPSHUFB Y3, Y4, Y4
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4
-	VPCMPEQB Y2, Y5, Y5
-	VPSUBB Y4, Y0, Y0
-	VPSUBB Y5, Y1, Y1
 	SUBL $8, CX
 	JGE runt8
 
@@ -431,18 +413,9 @@ runt1:	ADDL $8, CX			// anything left to process?
 crossrunt1:
 	ANDNQ (SI), R9, R8		// load 8 bytes from unaligned buffer
 
-dorunt1:VMOVQ R8, X5
-	VPBROADCASTD X5, Y4
-	VPSRLDQ $4, X5, X5
-	VPBROADCASTD X5, Y5
-	VPSHUFB Y3, Y4, Y4
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4
-	VPCMPEQB Y2, Y5, Y5
-	VPSUBB Y4, Y0, Y0
-	VPSUBB Y5, Y1, Y1
+dorunt1:VMOVQ R8, X6
+	VPSRLDQ $4, X6, X5
+	COUNT8(X6, X5)
 
 	// move tail to counters and perform final accumulation
 runt_accum:
