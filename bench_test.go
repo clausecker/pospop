@@ -8,7 +8,7 @@ import "strconv"
 
 // sizes to benchmark
 var benchmarkLengths = []int{
-	1000, 10 * 1000, 100 * 1000, 1000 * 1000, 10 * 1000 * 1000, 100 * 1000 * 1000,
+	1, 10, 100, 1000, 10 * 1000, 100 * 1000, 1000 * 1000, 10 * 1000 * 1000, 100 * 1000 * 1000,
 }
 
 // sizes to benchmark in a short benchmark
