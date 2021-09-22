@@ -33,6 +33,9 @@ Implementations are provided for the following SIMD extensions:
  * NEON (arm64)
  * generic kernel (all architectures)
 
+The three kernels for amd64 correspond to the v4, v3, and v1 values
+of the upcoming GOAMD64 environment variable.
+
 Due to some required improvements in the assembler, the NEON kernel will
 only be available on Go 1.16 or newer.  When building with earlier
 versions of the tool chain, only the generic kernel is available.
@@ -55,20 +58,20 @@ find these results.
 
 
 		amd64		386		arm64		arm
-avx512		66.3 GB/s	---		---		---
-avx2		30.9 GB/s	31.6 GB/s	---		---
-sse2		16.0 GB/s	15.6 GB/s	---		---
-neon		---		---		3.81 GB/s	---
-generic8	1.08 GB/s	297 MB/s	253 MB/s	49.0 MB/s
-generic16	1.82 GB/s	1.36 GB/s	445 MB/s	67.1 MB/s
-generic32	2.71 GB/s	2.21 GB/s	620 MB/s	105 MB/s
-generic64	3.60 GB/s	1.89 GB/s	1.04 GB/s	82.9 MB/s
+avx512		90.2 GB/s	---		---		---
+avx2		35.9 GB/s	31.6 GB/s	---		---
+sse2		16.1 GB/s	15.6 GB/s	---		---
+neon		---		---		37.2 GB/s	---
+generic8	1.05 GB/s	297 MB/s	1.68 GB/s	49.0 MB/s
+generic16	1.78 GB/s	1.36 GB/s	3.03 GB/s	67.1 MB/s
+generic32	2.71 GB/s	2.21 GB/s	3.83 GB/s	105 MB/s
+generic64	3.59 GB/s	1.89 GB/s	6.56 GB/s	82.9 MB/s
 
-The following systems were used for benchmarks:
+The following systems were used for benchmarks, all using Go 1.16:
 
- * amd64, 386: Intel(R) Xeon(R) Gold 6138 CPU @ 2.00 GHz
- * arm64: ARM Cortex-A72 r0p3 (Raspberry Pi 4B)
- * arm: ARM Cortex-A7 r0p5 (Raspberry Pi 2B+)
+ * amd64, 386: Intel(R) Xeon(R) Gold 6138 CPU @ 2.00GHz
+ * arm64: Apple M1
+ * arm: ARM Cortex-A72 r0p3 (Raspberry Pi 4B)
 
 Remaining Work
 --------------
