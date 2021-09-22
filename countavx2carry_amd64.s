@@ -41,15 +41,15 @@ GLOBL window<>(SB), RODATA|NOPTR, $64
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and a remaining length in CX.
 TEXT countavxcarry<>(SB), NOSPLIT, $32-0
-	TESTQ CX, CX			// any data to process at all?
-	CMOVQEQ CX, SI			// if not, avoid loading head
-
-	// constants for processing the head
+	// constants for processing the head and tail
 	VPBROADCASTQ magic<>+32(SB), Y2	// bit position mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
 	VPXOR Y7, Y7, Y7		// zero register
 	VPXOR Y0, Y0, Y0		// lower counter register
 	VPXOR Y1, Y1, Y1		// upper counter register
+
+	CMPQ CX, $15*32			// is the CSA kernel worth using?
+	JLT runt
 
 	// load head into scratch space (until alignment/end is reached)
 	MOVL SI, DX
@@ -59,18 +59,8 @@ TEXT countavxcarry<>(SB), NOSPLIT, $32-0
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
 	VMOVDQA -32(SI)(AX*1), Y4	// load head
 	LEAQ window<>(SB), DX		// load window mask base pointer
-	VMOVDQU (DX)(AX*1), Y5		// load mask of the bytes that are part of the head
-	VPAND Y5, Y4, Y4		// and mask out those bytes that are not
-	CMPQ AX, CX			// is the head shorter than the buffer?
-	JLT norunt			// if yes, perform special processing
-
-	// buffer is short and does not cross a 32 byte boundary
-	SUBL CX, AX			// number of bytes by which we overshoot the buffer
-	VMOVDQU (DX)(AX*1), Y5		// load mask of bytes that overshoot the buffer
-	VPANDN Y4, Y5, Y4		// and clear them in Y4
-	MOVL CX, AX			// set up the true prefix length
-
-norunt:	VMOVDQU Y4, scratch-32(SP)	// copy to scratch space
+	VPAND (DX)(AX*1), Y4, Y4	// mask out bytes not in head
+	VMOVDQU Y4, scratch-32(SP)	// copy to scratch space
 	SUBQ AX, CX			// mark head as accounted for
 	MOVL SI, DX			// keep a copy of the head pointer
 	ADDQ AX, SI			// and advance past head
@@ -83,6 +73,7 @@ norunt:	VMOVDQU Y4, scratch-32(SP)	// copy to scratch space
 head:	VPBROADCASTD scratch-32+0(SP)(DX*8), Y4
 					// Y4 = 3210:3210:3210:3210:3210:3210:3210:3210
 	VPBROADCASTD scratch-32+4(SP)(DX*8), Y5
+	INCL DX
 	VPSHUFB Y3, Y4, Y4		// Y4 = 3333:3333:2222:2222:1111:1111:0000:0000
 	VPSHUFB Y3, Y5, Y5
 	VPAND Y2, Y4, Y4		// mask out one bit in each copy of the bytes
@@ -91,7 +82,6 @@ head:	VPBROADCASTD scratch-32+0(SP)(DX*8), Y4
 	VPCMPEQB Y2, Y5, Y5		// or to 0 otherwise
 	VPSUBB Y4, Y0, Y0		// add 1/0 (subtract -1/0) to counters
 	VPSUBB Y5, Y1, Y1
-	ADDL $1, DX
 	CMPL DX, $4			// have we processed the full head?
 	JLT head
 
@@ -394,6 +384,73 @@ end:	VPXOR Y7, Y7, Y7
 
 	// and perform a final accumulation
 	VPXOR Y7, Y7, Y7
+	CALL *BX
+	VZEROUPPER
+	RET
+
+	// buffer is short, do just head/tail processing
+runt:	SUBL $8, CX			// 8 byte left to process?
+	JLT runt1
+
+	// process runt, 8 bytes at a time
+runt8:	VPBROADCASTD 0(SI), Y4
+	VPBROADCASTD 4(SI), Y5
+	ADDQ $8, SI
+	VPSHUFB Y3, Y4, Y4
+	VPSHUFB Y3, Y5, Y5
+	VPAND Y2, Y4, Y4
+	VPAND Y2, Y5, Y5
+	VPCMPEQB Y2, Y4, Y4
+	VPCMPEQB Y2, Y5, Y5
+	VPSUBB Y4, Y0, Y0
+	VPSUBB Y5, Y1, Y1
+	SUBL $8, CX
+	JGE runt8
+
+	// process remaining 0--7 byte
+	// while making sure we don't get a page fault
+runt1:	ADDL $8, CX			// anything left to process?
+	JLE runt_accum
+
+	MOVL SI, AX
+	ANDL $7, AX			// offset from 8 byte alignment
+	LEAL (AX)(CX*1), DX		// length of buffer plus alignment
+	SHLL $3, CX			// remaining length in bits
+	MOVQ $-1, R9
+	SHLQ CX, R9			// mask of bits where R8 is out of range
+	CMPL DX, $8			// if this exceeds the alignment boundary
+	JGE crossrunt1			// we can safely load directly
+
+	ANDQ $~7, SI			// align buffer to 8 bytes
+	MOVQ (SI), R8			// and load 8 bytes from buffer
+	SHLL $3, AX			// offset from 8 byte alignment in bits
+	SHRXQ AX, R8, R8		// buffer starting at the beginning
+	ANDNQ R8, R9, R8
+	JMP dorunt1
+
+crossrunt1:
+	ANDNQ (SI), R9, R8		// load 8 bytes from unaligned buffer
+
+dorunt1:VMOVQ R8, X5
+	VPBROADCASTD X5, Y4
+	VPSRLDQ $4, X5, X5
+	VPBROADCASTD X5, Y5
+	VPSHUFB Y3, Y4, Y4
+	VPSHUFB Y3, Y5, Y5
+	VPAND Y2, Y4, Y4
+	VPAND Y2, Y5, Y5
+	VPCMPEQB Y2, Y4, Y4
+	VPCMPEQB Y2, Y5, Y5
+	VPSUBB Y4, Y0, Y0
+	VPSUBB Y5, Y1, Y1
+
+	// move tail to counters and perform final accumulation
+runt_accum:
+	VPXOR Y7, Y7, Y7
+	VPUNPCKLBW Y7, Y0, Y8
+	VPUNPCKHBW Y7, Y0, Y9
+	VPUNPCKLBW Y7, Y1, Y10
+	VPUNPCKHBW Y7, Y1, Y11
 	CALL *BX
 	VZEROUPPER
 	RET
