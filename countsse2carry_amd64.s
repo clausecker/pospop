@@ -8,8 +8,8 @@
 DATA magic<> +0(SB)/8, $0x8040201008040201
 DATA magic<>+ 8(SB)/8, $0xaaaaaaaa55555555
 DATA magic<>+16(SB)/8, $0xcccccccc33333333
-DATA magic<>+24(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $28
+DATA magic<>+24(SB)/8, $0x0f0f0f0f00ff00ff
+GLOBL magic<>(SB), RODATA|NOPTR, $32
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't
 // seem to be a good way to do this with less memory wasted.
@@ -19,8 +19,8 @@ DATA window<>+16(SB)/8, $0xffffffffffffffff
 DATA window<>+24(SB)/8, $0xffffffffffffffff
 GLOBL window<>(SB), RODATA|NOPTR, $32
 
-// B:A = A+B+C, D used for scratch space
-#define CSA(A, B, C, D) \
+// B:A = A+B+C
+#define CSA(A, B, C) \
 	PXOR C, B \
 	PXOR A, C \
 	PXOR B, A \
@@ -54,7 +54,7 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation funciton in BX, a possibly unaligned input buffer in SI,
 // counters in DI and a remaining length in CX.
-TEXT countssecarry<>(SB), NOSPLIT, $0-0
+TEXT countssecarry<>(SB), NOSPLIT, $32-0
 	// constants for processing the head
 	MOVQ magic<>+0(SB), X6		// bit position mask
 	PSHUFD $0x44, X6, X6		// broadcast into both qwords
@@ -104,48 +104,106 @@ nohead:	MOVOA X8, X9
 	PUNPCKHBW X7, X15
 
 	SUBQ $15*16, CX			// enough data left to process?
-	JLT endvec			// also, pre-subtract
+	LEAQ -16(CX), DX		// if not, adjust CX
+	CMOVQLT DX, CX
+	JLT endvec			// and go to endvec
 
 	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
 
-vec:	MOVOA 0*16(SI), X0		// load 240 bytes from buf
-	MOVOA 1*16(SI), X1		// and sum them into Y3:Y2:Y1:Y0
-	MOVOA 2*16(SI), X4
-	MOVOA 3*16(SI), X2
-	MOVOA 4*16(SI), X3
-	MOVOA 5*16(SI), X5
-	MOVOA 6*16(SI), X6
-	CSA(X0, X1, X4, X7)
-	MOVOA 7*16(SI), X4
-	CSA(X3, X2, X5, X7)
-	MOVOA 8*16(SI), X5
-	CSA(X0, X3, X6, X7)
-	MOVOA 9*16(SI), X6
-	CSA(X1, X2, X3, X7)
-	MOVOA 10*16(SI), X3
-	CSA(X0, X4, X5, X7)
-	MOVOA 11*16(SI), X5
-	CSA(X0, X3, X6, X7)
+
+	// load 240 bytes from buf and sum them into Y3:Y2:Y1:Y0
+	MOVOA 0*16(SI), X2
+	MOVOA 1*16(SI), X1
+	MOVOA 2*16(SI), X0
+	MOVOA 3*16(SI), X5
+	MOVOA 4*16(SI), X4
+	MOVOA 5*16(SI), X3
+	CSA(X0, X1, X2)
+	MOVOA 6*16(SI), X7
+	MOVOA 7*16(SI), X6
+	MOVOA 8*16(SI), X2
+	CSA(X3, X4, X5)
+	MOVOA 9*16(SI), X5
+	CSA(X2, X6, X7)
+	MOVOA 10*16(SI), X7
+	CSA(X0, X5, X3)
+	MOVOA 11*16(SI), X3
+	CSA(X1, X4, X6)
 	MOVOA 12*16(SI), X6
-	CSA(X1, X3, X4, X7)
-	MOVOA 13*16(SI), X4
-	CSA(X0, X5, X6, X7)
+	CSA(X0, X2, X7)
+	MOVOA 13*16(SI), X7
+	CSA(X3, X7, X6)
 	MOVOA 14*16(SI), X6
-	CSA(X0, X4, X6, X7)
-	CSA(X1, X4, X5, X7)
-	CSA(X2, X3, X4, X7)
-
-	// load magic constants
-	MOVQ magic<>+8(SB), X7
-	PSHUFD $0x55, X7, X6		// 0xaaaaaaaa
-	PSHUFD $0x00, X7, X7		// 0x55555555
-
+	CSA(X1, X2, X5)
 	ADDQ $15*16, SI
-#define D	90
-	PREFETCHT0 (D+ 0)*16(SI)
-	PREFETCHT0 (D+ 4)*16(SI)
-	PREFETCHT0 (D+ 8)*16(SI)
-	PREFETCHT0 (D+12)*16(SI)
+	CSA(X0, X3, X6)
+	CSA(X1, X3, X7)
+	CSA(X2, X3, X4)
+
+	SUBQ $16*32, CX			// enough data left to process?
+	JLT post
+
+	// load 256 bytes from buf, add them to X0..X3 into X0..X4
+vec:	MOVOA 0*16(SI), X4
+	MOVOA 1*16(SI), X5
+	MOVOU X8, X8save-32(SP)		// stash some counters to give us
+	MOVOU X9, X9save-16(SP)		// more registers to play with
+	MOVOA 2*16(SI), X6
+	MOVOA 3*16(SI), X7
+	MOVOA 4*16(SI), X8
+	MOVOA 5*16(SI), X9
+	CSA(X0, X5, X4)
+	MOVOA 6*16(SI), X4
+	CSA(X6, X8, X7)
+	MOVOA 7*16(SI), X7
+	CSA(X1, X8, X5)
+	MOVOA 8*16(SI), X5
+	CSA(X0, X6, X9)
+	MOVOA 9*16(SI), X9
+	CSA(X4, X5, X7)
+	MOVOA 10*16(SI), X7
+	CSA(X1, X5, X6)
+	MOVOA 11*16(SI), X6
+	CSA(X0, X4, X9)
+	MOVOA 12*16(SI), X9
+	CSA(X2, X5, X8)
+	MOVOA 13*16(SI), X8
+	CSA(X0, X6, X7)
+	MOVOA 14*16(SI), X7
+	CSA(X1, X4, X6)
+	MOVOA 15*16(SI), X6
+	CSA(X7, X8, X9)
+	ADDQ $16*16, SI
+	CSA(X0, X6, X7)
+	CSA(X1, X6, X8)
+	CSA(X2, X4, X6)
+	CSA(X2, X3, X4)
+
+	...
+
+	SUBL $16*2, AX			// account for possible overflow
+	CMPL AX, $16*2			// enough space left in the counters?
+	JGE have_space
+
+	CALL *BX			// call accumulation function
+	PXOR X8, X8			// clear counters for next round
+	PXOR X9, X9
+	PXOR X10, X10
+	PXOR X11, X11
+	PXOR X12, X12
+	PXOR X13, X13
+	PXOR X14, X14
+	PXOR X15, X15
+
+	MOVL $65535, AX			// space left til overflow could occur
+
+have_space:
+	SUBQ $16*16, CX			// account for bytes consumed
+	JGE vec
+
+post:	MOVQ magic<>+8(SB), X5		// load magic constants
+	PSHUFD $0x55, X5, X6		// 0xaaaaaaaa
+	PSHUFD $0x00, X5, X7		// 0x55555555
 
 	// group X0--X3 into nibbles in the same register
 	MOVOA X0, X5
@@ -254,28 +312,6 @@ vec:	MOVOA 0*16(SI), X0		// load 240 bytes from buf
 	ACCUM(X10, X11, X4)
 	ACCUM(X12, X13, X1)
 	ACCUM(X14, X15, X5)
-
-	SUBL $15*2, AX			// account for possible overflow
-	CMPL AX, $15*2			// enough space left in the counters?
-	JGE have_space
-
-	CALL *BX			// call accumulation function
-
-	// clear counters for next round
-	PXOR X8, X8
-	PXOR X9, X9
-	PXOR X10, X10
-	PXOR X11, X11
-	PXOR X12, X12
-	PXOR X13, X13
-	PXOR X14, X14
-	PXOR X15, X15
-
-	MOVL $65535, AX			// space left til overflow could occur
-
-have_space:
-	SUBQ $15*16, CX			// account for bytes consumed
-	JGE vec
 
 	// constants for processing the tail
 endvec:	MOVQ magic<>+0(SB), X6		// bit position mask
