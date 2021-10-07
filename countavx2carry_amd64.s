@@ -60,8 +60,6 @@ TEXT countavxcarry<>(SB), NOSPLIT, $0-0
 	VPBROADCASTQ magic<>+32(SB), Y2	// bit position mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
 	VPXOR Y7, Y7, Y7		// zero register
-	VPXOR Y0, Y0, Y0		// lower counter register
-	VPXOR Y1, Y1, Y1		// upper counter register
 
 	CMPQ CX, $15*32			// is the CSA kernel worth using?
 	JLT runt
@@ -69,51 +67,16 @@ TEXT countavxcarry<>(SB), NOSPLIT, $0-0
 	// load head into scratch space (until alignment/end is reached)
 	MOVL SI, DX
 	ANDL $31, DX			// offset of the buffer start from 32 byte alignment
-	JEQ nohead			// if source buffer is aligned, skip head processing
 	MOVL $32, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
-	VMOVDQA -32(SI)(AX*1), Y6	// load head
+	SUBQ DX, SI			// align source to 64 bytes
+	VMOVDQA (SI), Y0		// load head
+	ADDQ DX, CX			// and account for head length
 	LEAQ window<>(SB), DX		// load window mask base pointer
-	VPAND (DX)(AX*1), Y6, Y6	// mask out bytes not in head
-	VMOVDQU Y4, scratch-32(SP)	// copy to scratch space
-	SUBQ AX, CX			// mark head as accounted for
-	ADDQ AX, SI			// and advance past head
+	VPAND (DX)(AX*1), Y0, Y0	// mask out bytes not in head
 
-	// process head, 8 bytes at a time
-	VPSRLDQ $4, X6, X5
-	COUNT8(X6, X5)
-
-	VPSRLDQ $12, X6, X5
-	VPERMQ $0x39, Y6, Y6		// rotate Y6 right by a qword
-	COUNT8(X6, X5)
-
-	VPSRLDQ $12, X6, X5
-	VPERMQ $0x39, Y6, Y6		// rotate Y6 right by a qword
-	COUNT8(X6, X5)
-
-	VPSRLDQ $12, X6, X5
-	VPERMQ $0x39, Y6, Y6		// rotate Y6 right by a qword
-	COUNT8(X6, X5)
-
-	// initialise counters to what we have
-nohead:	VPUNPCKLBW Y7, Y0, Y8		// 01234567[0:1]
-	VPUNPCKHBW Y7, Y0, Y9		// 89abcdef[0:1]
-	VPUNPCKLBW Y7, Y1, Y10		// 01234567[2:3]
-	VPUNPCKHBW Y7, Y1, Y11		// 89abcdef[2:3]
-
-	SUBQ $15*32, CX			// enough data left to process?
-	LEAQ -32(CX), DX		// if not, adjust CX
-	CMOVQLT DX, CX
-	JLT endvec			// and go to endvec
-
-	VPBROADCASTD magic<>+40(SB), Y15 // 0x55555555
-	VPBROADCASTD magic<>+44(SB), Y13 // 0x33333333
-
-	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
-
-	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
-	VMOVDQA 1*32(SI), Y1		// and sum them into Y3:Y2:Y1:Y0
-	VMOVDQA 2*32(SI), Y4
+	VMOVDQA 1*32(SI), Y1		// load 480 (-32) bytes from buf
+	VMOVDQA 2*32(SI), Y4		// and sum them into Y3:Y2:Y1:Y0
 	VMOVDQA 3*32(SI), Y2
 	VMOVDQA 4*32(SI), Y3
 	VMOVDQA 5*32(SI), Y5
@@ -134,13 +97,21 @@ nohead:	VPUNPCKLBW Y7, Y0, Y8		// 01234567[0:1]
 	VMOVDQA 13*32(SI), Y4
 	CSA(Y0, Y5, Y6, Y7)
 	VMOVDQA 14*32(SI), Y6
+	VPBROADCASTD magic<>+40(SB), Y15 // 0x55555555
+	VPBROADCASTD magic<>+44(SB), Y13 // 0x33333333
 	CSA(Y0, Y4, Y6, Y7)
+	VPXOR Y8, Y8, Y8		// initialise counters
+	VPXOR Y9, Y9, Y9
 	CSA(Y1, Y4, Y5, Y7)
+	VPXOR Y10, Y10, Y10
+	VPXOR Y11, Y11, Y11
 	CSA(Y2, Y3, Y4, Y7)
 
 	ADDQ $15*32, SI
-	SUBQ $16*32, CX			// enough data left to process?
+	SUBQ $(15+16)*32, CX		// enough data left to process?
 	JLT post
+
+	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
 
 	// load 512 bytes from buf, add them to Y0..Y3 into Y0..Y4
 vec:	VMOVDQA 0*32(SI), Y4
@@ -380,7 +351,9 @@ end:	VPXOR Y7, Y7, Y7
 	RET
 
 	// buffer is short, do just head/tail processing
-runt:	SUBL $8, CX			// 8 byte left to process?
+runt:	VPXOR Y0, Y0, Y0		// lower counter register
+	VPXOR Y1, Y1, Y1		// upper counter register
+	SUBL $8, CX			// 8 byte left to process?
 	JLT runt1
 
 	// process runt, 8 bytes at a time
