@@ -140,7 +140,7 @@ nohead:	MOVOA X8, X9
 	CSA(X1, X3, X7)
 	CSA(X2, X3, X4)
 
-	SUBQ $16*32, CX			// enough data left to process?
+	SUBQ $16*16, CX			// enough data left to process?
 	JLT post
 
 	// load 256 bytes from buf, add them to X0..X3 into X0..X4
@@ -173,14 +173,14 @@ vec:	MOVOA 0*16(SI), X4
 	CSA(X1, X4, X6)
 	MOVOA 15*16(SI), X6
 	CSA(X7, X8, X9)
-	MOVOU X9, magic<>+8(SB)		// 55555555, aaaaaaaa, 33333333, cccccccc
+	MOVOU magic<>+8(SB), X9		// 55555555, aaaaaaaa, 33333333, cccccccc
 	CSA(X0, X6, X7)
 	CSA(X1, X6, X8)
 	CSA(X2, X4, X6)
-	CSA(X2, X3, X4)
+	CSA(X3, X4, X5)
 
 	ADDQ $16*16, SI
-	MOVQ X8, magic<>+24(SB)		// 0f0f0f0f, 00ff00ff
+	MOVQ magic<>+24(SB), X8		// 0f0f0f0f, 00ff00ff
 
 	// now X0..X4 hold counters; preserve X0..X4 for the next round
 	// and add X4 to the the counters.
@@ -191,10 +191,10 @@ vec:	MOVOA 0*16(SI), X4
 	PAND X7, X5			// X5 = 02468ace x8
 	PANDN X4, X7			// X7 = 13579bdf x8
 	PSRLL $1, X7
-	MOVOA X7, X4
-	PUNPCKLQDQ X5, X4
-	PUNPCKHQDQ X5, X7
-	PADDL X7, X4			// X4 = 02468ace x4 13579bdf x4
+	MOVOA X5, X4
+	PUNPCKLQDQ X7, X4
+	PUNPCKHQDQ X7, X5
+	PADDL X5, X4			// X4 = 02468ace x4 13579bdf x4
 
 	// split again into nibbles
 	PSHUFD $0xaa, X9, X5		// X7 = 33..33
@@ -248,7 +248,7 @@ vec:	MOVOA 0*16(SI), X4
 	PSRLL $8, X9
 	PADDW X5, X12
 	PADDW X9, X13
-	MOVOU X9save-32(SP), X9
+	MOVOU X9save-16(SP), X9
 	MOVOA X6, X5
 	PANDN X7, X6			// X6 = 89abcdef[3]
 	PAND X5, X7			// X7 = 01234567[3]
@@ -403,7 +403,7 @@ endvec:	MOVQ magic<>+0(SB), X6		// bit position mask
 	PXOR X3, X3
 
 	// process tail, 4 bytes at a time
-	SUBL $8-15*16, CX		// 8 bytes left to process?
+	SUBL $8-16*16, CX		// 8 bytes left to process?
 	JLT tail1
 
 tail8:	COUNT4(X0, X1, 0(SI))
