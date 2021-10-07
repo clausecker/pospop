@@ -175,11 +175,16 @@ vec:	MOVOA 0*16(SI), X4
 	CSA(X7, X8, X9)
 	MOVOU magic<>+8(SB), X9		// 55555555, aaaaaaaa, 33333333, cccccccc
 	CSA(X0, X6, X7)
-	CSA(X1, X6, X8)
-	CSA(X2, X4, X6)
-	CSA(X3, X4, X5)
-
 	ADDQ $16*16, SI
+#define D	90
+	PREFETCHT0 (D+ 0)*16(SI)
+	CSA(X1, X6, X8)
+	PREFETCHT0 (D+ 4)*16(SI)
+	CSA(X2, X4, X6)
+	PREFETCHT0 (D+ 8)*16(SI)
+	CSA(X3, X4, X5)
+	PREFETCHT0 (D+12)*16(SI)
+
 	MOVQ magic<>+24(SB), X8		// 0f0f0f0f, 00ff00ff
 
 	// now X0..X4 hold counters; preserve X0..X4 for the next round
