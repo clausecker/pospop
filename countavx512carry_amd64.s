@@ -41,7 +41,6 @@ TEXT countavx512carry<>(SB), NOSPLIT, $0-0
 	VPBROADCASTQ magic<>+8(SB), Z31	// 8040201008040201
 	VPTERNLOGD $0xff, Z30, Z30, Z30	// ffffffff
 	VPXORD Y25, Y25, Y25		// zero register
-	VPXOR Y0, Y0, Y0		// counter register
 
 	// turn X15 into a set of qword masks in Z29
 	VPUNPCKLBW X1, X1, X1		// 7766:5544:3322:1100
@@ -56,47 +55,21 @@ TEXT countavx512carry<>(SB), NOSPLIT, $0-0
 	// compute misalignment mask
 	MOVL SI, DX
 	ANDL $63, DX			// offset of the buffer start from 64 byte alignment
-	JEQ nohead
-	MOVQ $-1, R8
+	MOVQ $-1, AX
 	SUBQ DX, SI			// align source to 64 byte
-	SHLXQ DX, R8, R8		// mask out the head of the load
-	KMOVQ R8, K1			// prepare mask register
-	VMOVDQU8.Z (SI), K1, Z4		// load head with mask
-	ADDQ $64, SI			// advance head past loaded data
-	LEAQ -64(CX)(DX*1), CX		// account for head length in CX
+	ADDQ DX, CX			// account for head length in CX
+	SHLXQ DX, AX, AX		// mask out the head of the load
+	KMOVQ AX, K1			// prepare mask register
 
-	// process head, 16 bytes at a time
-	MOVL $4, DX
-
-head:	VPUNPCKHQDQ X4, X4, X6		// move second qword into X6
-	SUBL $1, DX
-	VPBROADCASTQ X4, Z5		// Z5 = 7--0:7--0:7--0:7--0:7--0:7--0:7--0:7--0
-	VPBROADCASTQ X6, Z6		// Z6 = 7--0:7--0:7--0:7--0:7--0:7--0:7--0:7--0
-	VPSHUFB Z29, Z5, Z5		// Z5 = 7..7:6..6:5..5:4..4:3..3:2..2:1..1:0..0
-	VPSHUFB Z29, Z6, Z6		// Z6 = 7..7:6..6:5..5:4..4:3..3:2..2:1..1:0..0
-	VSHUFI64X2 $0x39, Z4, Z4, Z4	// rotate Z4 right by 16 bytes
-	VPTESTMB Z31, Z5, K1		// set bits in K1 if corresponding bit set in Z5
-	VPTESTMB Z31, Z6, K2		// set bits in K2 if corresponding bit set in Z6
-	VPSUBB Z30, Z0, K1, Z0		// subtract -1 from counters where K1 set
-	VPSUBB Z30, Z0, K2, Z0		// subtract -1 from counters where K2 set
-	JNZ head			// loop until processes completely
-
-	// initialise counters
-nohead:	VPUNPCKLBW Z25, Z0, Z8
-	VPUNPCKHBW Z25, Z0, Z9
-
-	SUBQ $15*64, CX			// enough data left to process?
-	LEAQ -64(CX), DX		// if not, adjust CX
-	CMOVQLT DX, CX
-	JLT endvec			// and go to endvec
-
-	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
+	VMOVDQU8.Z 0*64(SI), K1, Z0	// load 960 bytes from buf
 	VMOVDQA64 1*64(SI), Z1		// and sum them into Z3:Z2:Z1:Z0
 	VMOVDQA64 2*64(SI), Z4
 	VMOVDQA64 3*64(SI), Z2
 	VMOVDQA64 4*64(SI), Z3
 	VMOVDQA64 5*64(SI), Z5
 	VMOVDQA64 6*64(SI), Z6
+	VPXOR Y8, Y8, Y8		// initialise counters
+	VPXOR Y9, Y9, Y9
 	CSA(Z0, Z1, Z4, Z7)
 	VMOVDQA64 7*64(SI), Z4
 	CSA(Z3, Z2, Z5, Z7)
@@ -123,7 +96,7 @@ nohead:	VPUNPCKLBW Z25, Z0, Z8
 	CSA(Z2, Z3, Z4, Z7)
 
 	ADDQ $15*64, SI
-	SUBQ $16*64, CX			// enough data left to process?
+	SUBQ $(15+16)*64, CX		// enough data left to process?
 	JLT post
 
 	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff
@@ -337,7 +310,8 @@ end:	VPUNPCKLBW Z25, Z0, Z1
 
 	// special processing for when the data is less than
 	// one iteration of the kernel
-runt:	SUBL $8, CX			// 8 bytes left to process?
+runt:	VPXOR Y0, Y0, Y0		// counter register
+	SUBL $8, CX			// 8 bytes left to process?
 	JLT runt1
 
 runt8:	VPBROADCASTQ (SI), Z4
