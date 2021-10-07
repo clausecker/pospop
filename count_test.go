@@ -127,6 +127,12 @@ func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match: %v\n", len, countDiff(counts[:], refCounts[:]))
+
+			min := minimizeTestcase64(count64, buf)
+			tcstr := testcaseString64(min)
+			if tcstr != "" {
+				t.Log("minimized test case:\n", tcstr)
+			}
 		}
 	}
 }
