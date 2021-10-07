@@ -8,7 +8,7 @@
 DATA magic<> +0(SB)/8, $0x8040201008040201
 DATA magic<>+ 8(SB)/8, $0xaaaaaaaa55555555
 DATA magic<>+16(SB)/8, $0xcccccccc33333333
-DATA magic<>+24(SB)/8, $0x0f0f0f0f00ff00ff
+DATA magic<>+24(SB)/8, $0x00ff00ff0f0f0f0f
 GLOBL magic<>(SB), RODATA|NOPTR, $32
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't
@@ -173,13 +173,94 @@ vec:	MOVOA 0*16(SI), X4
 	CSA(X1, X4, X6)
 	MOVOA 15*16(SI), X6
 	CSA(X7, X8, X9)
-	ADDQ $16*16, SI
+	MOVOU X9, magic<>+8(SB)		// 55555555, aaaaaaaa, 33333333, cccccccc
 	CSA(X0, X6, X7)
 	CSA(X1, X6, X8)
 	CSA(X2, X4, X6)
 	CSA(X2, X3, X4)
 
-	...
+	ADDQ $16*16, SI
+	MOVQ X8, magic<>+24(SB)		// 0f0f0f0f, 00ff00ff
+
+	// now X0..X4 hold counters; preserve X0..X4 for the next round
+	// and add X4 to the the counters.
+
+	// split into even/odd and reduce into crumbs
+	PSHUFD $0x00, X9, X7		// X7 = 55..55
+	MOVOA X4, X5
+	PAND X7, X5			// X5 = 02468ace x8
+	PANDN X4, X7			// X7 = 13579bdf x8
+	PSRLL $1, X7
+	MOVOA X7, X4
+	PUNPCKLQDQ X5, X4
+	PUNPCKHQDQ X5, X7
+	PADDL X7, X4			// X4 = 02468ace x4 13579bdf x4
+
+	// split again into nibbles
+	PSHUFD $0xaa, X9, X5		// X7 = 33..33
+	MOVOA X5, X7
+	PANDN X4, X5			// X5 = 26ae x4 37bf x4
+	PAND X7, X4			// X4 = 048c x4 159d x4
+	PSRLL $2, X5
+
+	// split into bytes and shuffle into order
+	PSHUFD $0x00, X8, X6		// X6 = 0f..0f
+	MOVOA X6, X7
+	PANDN X4, X6			// X6 = 4c x4 5d x4
+	PAND X7, X4			// X4 = 08 x4 19 x4
+	MOVOA X7, X9
+	PANDN X5, X7			// X7 = 6e x4 7f x4
+	PAND X9, X5			// X5 = 2a x4 3b x4
+	PSLLL $4, X4
+	PSLLL $4, X5
+
+	MOVOA X4, X9
+	PUNPCKLWL X5, X4		// X4 = 082a x4
+	PUNPCKHWL X5, X9		// X9 = 193b x4
+	MOVOA X6, X5
+	PUNPCKLWL X7, X5		// X5 = 4c6e x4
+	PUNPCKHWL X7, X6		// X6 = 5d7f x4
+	MOVOA X4, X7
+	PUNPCKLWL X9, X4		// X4 = 08192a3b[0:1]
+	PUNPCKHWL X9, X7		// X7 = 08192a3b[2:3]
+	MOVOA X5, X9
+	PUNPCKLWL X6, X5		// X5 = 4c5d6e7f[0:1]
+	PUNPCKHWL X6, X9		// X9 = 4c5d6e7f[2:3]
+	MOVOA X4, X6
+	PUNPCKLQDQ X5, X4		// X4 = 08192a3b4c5d6e7f[0]
+	PUNPCKHQDQ X5, X6		// X6 = 08192a3b4c5d6e7f[1]
+	MOVOA X7, X5
+	PUNPCKLQDQ X9, X5		// X5 = 08192a3b4c5d6e7f[2]
+	PUNPCKHQDQ X9, X7		// X7 = 08192a3b4c5d6e7f[3]
+
+	// split into words and add to counters
+	PSHUFD $0x55, X8, X8		// X8 = 00ff..00ff
+	MOVOA X8, X9
+	PANDN X6, X8			// X8 = 89abcdef[1]
+	PAND X9, X6			// X6 = 01234567[1]
+	PSRLL $8, X8
+	PADDW X6, X10
+	PADDW X8, X11
+	MOVOU X8save-32(SP), X8
+	MOVOA X9, X6
+	PANDN X5, X9			// X9 = 89abcdef[2]
+	PAND X6, X5			// X5 = 01234567[2]
+	PSRLL $8, X9
+	PADDW X5, X12
+	PADDW X9, X13
+	MOVOU X9save-32(SP), X9
+	MOVOA X6, X5
+	PANDN X7, X6			// X6 = 89abcdef[3]
+	PAND X5, X7			// X7 = 01234567[3]
+	PSRLL $8, X6
+	PADDW X7, X14
+	PADDW X6, X15
+	MOVOA X5, X6
+	PANDN X4, X5			// X5 = 89abcdef[0]
+	PAND X6, X4			// X4 = 01234567[0]
+	PSRLL $8, X5
+	PADDW X4, X8
+	PADDW X5, X9
 
 	SUBL $16*2, AX			// account for possible overflow
 	CMPL AX, $16*2			// enough space left in the counters?
