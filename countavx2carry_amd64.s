@@ -64,12 +64,12 @@ TEXT countavxcarry<>(SB), NOSPLIT, $0-0
 	CMPQ CX, $15*32			// is the CSA kernel worth using?
 	JLT runt
 
-	// load head into scratch space (until alignment/end is reached)
+	// load head until alignment/end is reached
 	MOVL SI, DX
 	ANDL $31, DX			// offset of the buffer start from 32 byte alignment
 	MOVL $32, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
-	SUBQ DX, SI			// align source to 64 bytes
+	SUBQ DX, SI			// align source to 32 bytes
 	VMOVDQA (SI), Y0		// load head
 	ADDQ DX, CX			// and account for head length
 	LEAQ window<>(SB), DX		// load window mask base pointer
