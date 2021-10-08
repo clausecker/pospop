@@ -67,52 +67,18 @@ TEXT countssecarry<>(SB), NOSPLIT, $32-0
 	CMPQ CX, $15*16			// is the CSA kernel worth using?
 	JLT runt
 
-	// load head into scratch space (until alignment/end is reached)
+	// load head until alignment/end is reached
 	MOVL SI, DX
 	ANDL $15, DX			// offset of the buffer start from 16 byte alignment
-	JEQ nohead			// if source buffer is aligned, skip head processing
 	MOVL $16, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
+	SUBQ DX, SI			// align source to 16 bytes
+	ADDQ DX, CX			// and account for head length
 	MOVQ $window<>(SB), DX		// load window mask base pointer
-	MOVOU (DX)(AX*1), X3		// load mask of the bytes that are part of the head
-	PAND -16(SI)(AX*1), X3		// load head and mask out bytes that are not in the head
-	CMPQ AX, CX			// is the head shorter than the buffer?
-	SUBQ AX, CX			// mark head as accounted for
-	ADDQ AX, SI			// and advance past the head
+	MOVOU (DX)(AX*1), X2		// load mask of the bytes that are part of the head
+	PAND (SI), X2			// load head and mask out bytes that are not in the head
 
-	// process head in four increments of 4 bytes
-	COUNT4(X8, X10, X3)
-	PSRLO $4, X3
-	COUNT4(X12, X14, X3)
-	PSRLO $4, X3
-	COUNT4(X8, X10, X3)
-	PSRLO $4, X3
-	COUNT4(X12, X14, X3)
-
-	// initialise counters in X8--X15 to what we have
-nohead:	MOVOA X8, X9
-	PUNPCKLBW X7, X8
-	PUNPCKHBW X7, X9
-	MOVOA X10, X11
-	PUNPCKLBW X7, X10
-	PUNPCKHBW X7, X11
-	MOVOA X12, X13
-	PUNPCKLBW X7, X12
-	PUNPCKHBW X7, X13
-	MOVOA X14, X15
-	PUNPCKLBW X7, X14
-	PUNPCKHBW X7, X15
-
-	SUBQ $15*16, CX			// enough data left to process?
-	LEAQ -16(CX), DX		// if not, adjust CX
-	CMOVQLT DX, CX
-	JLT endvec			// and go to endvec
-
-	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
-
-
-	// load 240 bytes from buf and sum them into Y3:Y2:Y1:Y0
-	MOVOA 0*16(SI), X2
+	// load 240 - 16 bytes from buf and sum them into X3:X2:X1:X0
 	MOVOA 1*16(SI), X1
 	MOVOA 2*16(SI), X0
 	MOVOA 3*16(SI), X5
@@ -132,15 +98,20 @@ nohead:	MOVOA X8, X9
 	MOVOA 12*16(SI), X6
 	CSA(X0, X2, X7)
 	MOVOA 13*16(SI), X7
+	PXOR X9, X9			// initialise remaining counters
+	PXOR X11, X11
 	CSA(X3, X7, X6)
 	MOVOA 14*16(SI), X6
 	CSA(X1, X2, X5)
 	ADDQ $15*16, SI
 	CSA(X0, X3, X6)
+	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
 	CSA(X1, X3, X7)
+	PXOR X13, X13
+	PXOR X15, X15
 	CSA(X2, X3, X4)
 
-	SUBQ $16*16, CX			// enough data left to process?
+	SUBQ $(15+16)*16, CX		// enough data left to process?
 	JLT post
 
 	// load 256 bytes from buf, add them to X0..X3 into X0..X4
