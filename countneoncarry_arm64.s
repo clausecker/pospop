@@ -55,66 +55,42 @@ TEXT countneoncarry<>(SB), NOSPLIT, $0-0
 	BLT runt
 
 	// load head until alignment/end is reached
-	AND $15, R1, R5			// offset of the buffer start from 16 byte alignment
-	CBZ R5, nohead			// if source buffer is aligned skip head processing
-	SUB $16, R5, R5			// negated number of bytes til alignment is reached
+	AND $15, R1, R6			// offset of the buffer start from 16 byte alignment
 	AND $~15, R1, R1		// align the source buffer pointer
+	SUB $16, R6, R5			// negated number of bytes til alignment is reached
+	ADD R6, R3, R3			// account for head length in CX
 	NEG R5, R5			// number of bytes til alignment is reached
 	VLD1.P 16(R1), [V3.B16]		// load head, advance past it
 //	VMOVQ (R4)(R5), V5		// load mask of bytes that are part of the head
 	WORD $0x3ce56885
-	VAND V5.B16, V3.B16, V3.B16	// and mask out those bytes that are not
-
-	SUB R5, R3, R3			// mark head as accounted for
-
-	// process head in increments of 2 bytes
-	COUNT4(V8, V10, V3)
-	VMOV V3.S[1], V3.S[0]
-	COUNT4(V12, V14, V3)
-	VMOV V3.S[2], V3.S[0]
-	COUNT4(V8, V10, V3)
-	VMOV V3.S[3], V3.S[0]
-	COUNT4(V12, V14, V3)
-
-	// initialise counters in V8--V15 to what we have
-nohead:	VUXTL V8.B8, V9.H8		//  8--15  89abcdef[0]
-	VUXTL2 V8.B16, V8.H8		//  0-- 7  01234567[0]
-	VUXTL V10.B8, V11.H8		// 24--31  89abcdef[1]
-	VUXTL2 V10.B16, V10.H8		// 16--23  01234567[1]
-	VUXTL V12.B8, V13.H8		// 40--47  89abcdef[2]
-	VUXTL2 V12.B16, V12.H8		// 32--39  01234567[2]
-	VUXTL V14.B8, V15.H8		// 56--63  89abcdef[3]
-	VUXTL2 V14.B16, V14.H8		// 48--55  01234567[3]
-
-	SUBS $15*16, R3, R3		// enough data to process?
-	SUB $16, R3, R5			// if not, adjust R3
-	CSEL LT, R5, R3, R3
-	BLT endvec			// and go to endvec
-
-	MOVD $65535-4, R6		// space left til overflow could occur in V8--V15
-
-	VMOVI $0x55, V27.B16		// 55555555 for transposition
-	VMOVI $0x33, V26.B16		// 33333333 for transposition
-	VMOVI $0x0f, V25.B16		// 0f0f0f0f for extracting nibbles
+	VAND V5.B16, V3.B16, V0.B16	// and mask out those bytes that are not
 
 	// load 15 registers worth of data and accumulate into V3--V0
-	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
+	VLD1.P 2*16(R1), [V1.B16, V2.B16]
 	VLD1.P 4*16(R1), [V3.B16, V4.B16, V5.B16, V6.B16]
 	VLD1.P 4*16(R1), [V16.B16, V17.B16, V18.B16, V19.B16]
 	CSA(V0, V1, V2)
+	VMOVI $0x55, V27.B16		// 55555555 for transposition
 	CSAC(V0, V3, V4, V2)
+	VMOVI $0x33, V26.B16		// 33333333 for transposition
 	CSAC(V0, V5, V6, V3)
 	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 	CSA(V1, V2, V3)
 	CSA(V0, V16, V17)
+	VMOVI $0x0f, V25.B16		// 0f0f0f0f for extracting nibbles
 	CSA(V0, V18, V19)
+	MOVD $65535-4, R6		// space left til overflow could occur in V8--V15
 	CSAC(V1, V16, V18, V3)
+	VMOVI $0, V9.B16
 	CSA(V0, V4, V5)
+	VMOVI $0, V11.B16
 	CSA(V0, V6, V7)
+	VMOVI $0, V13.B16
 	CSA(V1, V4, V6)
+	VMOVI $0, V15.B16
 	CSA(V2, V3, V4)
 
-	SUBS $16*16, R3, R3		// enough data left to process?
+	SUBS $(15+16)*16, R3, R3	// enough data left to process?
 	BLT post
 
 	// load 16 registers worth of data and accumulate into V4--V0
