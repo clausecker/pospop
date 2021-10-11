@@ -1,10 +1,8 @@
 #include "textflag.h"
 
-// AVX512 based kernels for the positional population count operation.
-// All these kernels have the same backbone based on a 15-fold CSA
-// reduction to first reduce 960 byte into 4x64 byte, followed by a
-// bunch of shuffles to group the positional registers into nibbles.
-// These are then summed up using a width-specific summation function.
+// An AVX512 based kernel first doing a 15-fold CSA reduction
+// and then a 16-fold CSA reduction, carrying over place-value
+// vectors between iterations.
 // Required CPU extensions: BMI2, AVX-512 -F, -BW.
 
 // magic constants
@@ -13,7 +11,20 @@ DATA magic<>+ 8(SB)/8, $0x8040201008040201
 DATA magic<>+16(SB)/4, $0x55555555
 DATA magic<>+20(SB)/4, $0x33333333
 DATA magic<>+24(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $28
+DATA magic<>+28(SB)/4, $0x00ff00ff
+
+// permutation vectors for the last permutation step of the vec loop
+// permutes words
+// A = 0000 1111 2222 3333 4444 5555 6666 7777
+// B = 8888 9999 AAAA BBBB CCCC DDDD EEEE FFFF
+// into the order used by the counters:
+// Q1 = 0123 4567 0123 4567 0123 4567 0123 4567
+// Q2 = 89AB CDEF 89AB CDEF 89AB CDEF 89AB CDEF
+DATA magic<>+32(SB)/8, $0x1c1814100c080400
+DATA magic<>+40(SB)/8, $0x1d1915110d090501
+DATA magic<>+48(SB)/8, $0x1e1a16120e0a0602
+DATA magic<>+56(SB)/8, $0x1f1b17130f0b0703
+GLOBL magic<>(SB), RODATA|NOPTR, $64
 
 // B:A = A+B+C, D used as scratch space
 #define CSA(A, B, C, D) \
@@ -25,15 +36,11 @@ GLOBL magic<>(SB), RODATA|NOPTR, $28
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and an array length in CX.
 TEXT countavx512<>(SB), NOSPLIT, $0-0
-	TESTQ CX, CX			// any data to process at all?
-	CMOVQEQ CX, SI			// if not, avoid loading head
-
 	// head and tail constants, counter registers
 	VMOVQ magic<>+0(SB), X1		// 0706050403020100
 	VPBROADCASTQ magic<>+8(SB), Z31	// 8040201008040201
 	VPTERNLOGD $0xff, Z30, Z30, Z30	// ffffffff
 	VPXORD Y25, Y25, Y25		// zero register
-	VPXOR Y0, Y0, Y0		// counter register
 
 	// turn X15 into a set of qword masks in Z29
 	VPUNPCKLBW X1, X1, X1		// 7766:5544:3322:1100
@@ -42,58 +49,27 @@ TEXT countavx512<>(SB), NOSPLIT, $0-0
 	VPMOVZXDQ Y1, Z1		// -7:-6:-5:-4:-3:-2:-1:-0
 	VPSHUFD $0xa0, Z1, Z29		// 77:66:55:44:33:22:11:00
 
+	CMPQ CX, $15*64			// is the CSA kernel worth using?
+	JLT runt
+
 	// compute misalignment mask
 	MOVL SI, DX
 	ANDL $63, DX			// offset of the buffer start from 64 byte alignment
-	JEQ nohead
-	MOVQ $-1, R8
+	MOVQ $-1, AX
 	SUBQ DX, SI			// align source to 64 byte
-	SHLXQ CX, R8, R9		// mask with CX low order bits clear
-	NOTQ R9				// mask with CX low order bits set
-	CMPQ CX, $64			// does the buffer reach the end of the 64 byte load?
-	CMOVQLT R9, R8			// mask with min(CX, 64) low order bits set
-	SHLXQ DX, R8, R8		// mask out the head of the load
-	KMOVQ R8, K1			// prepare mask register
-	VMOVDQU8.Z (SI), K1, Z4		// load head with mask
-	ADDQ $64, SI			// advance head past loaded data
-	LEAQ -64(CX)(DX*1), CX		// account for head length in CX
+	ADDQ DX, CX			// account for head length in CX
+	SHLXQ DX, AX, AX		// mask out the head of the load
+	KMOVQ AX, K1			// prepare mask register
 
-	// process head, 16 bytes at a time
-	MOVL $4, DX
-
-head:	VPUNPCKHQDQ X4, X4, X6		// move second qword into X6
-	SUBL $1, DX
-	VPBROADCASTQ X4, Z5		// Z5 = 7--0:7--0:7--0:7--0:7--0:7--0:7--0:7--0
-	VPBROADCASTQ X6, Z6		// Z6 = 7--0:7--0:7--0:7--0:7--0:7--0:7--0:7--0
-	VPSHUFB Z29, Z5, Z5		// Z5 = 7..7:6..6:5..5:4..4:3..3:2..2:1..1:0..0
-	VPSHUFB Z29, Z6, Z6		// Z6 = 7..7:6..6:5..5:4..4:3..3:2..2:1..1:0..0
-	VSHUFI64X2 $0x39, Z4, Z4, Z4	// rotate Z4 right by 16 bytes
-	VPTESTMB Z31, Z5, K1		// set bits in K1 if corresponding bit set in Z5
-	VPTESTMB Z31, Z6, K2		// set bits in K2 if corresponding bit set in Z6
-	VPSUBB Z30, Z0, K1, Z0		// subtract -1 from counters where K1 set
-	VPSUBB Z30, Z0, K2, Z0		// subtract -1 from counters where K2 set
-	JNZ head			// loop until processes completely
-
-	// initialise counters
-nohead:	VPUNPCKLBW Z25, Z0, Z8
-	VPUNPCKHBW Z25, Z0, Z9
-
-	SUBQ $15*64, CX			// enough data left to process?
-	JLT endvec
-
-	VPBROADCASTD magic<>+16(SB), Z28 // 0x55555555 for transposition
-	VPBROADCASTD magic<>+20(SB), Z27 // 0x33333333 for transposition
-	VPBROADCASTD magic<>+24(SB), Z26 // 0x0f0f0f0f for transposition
-
-	MOVL $65535-8, AX		// space left til overflow could occur in Z8, Z9
-
-vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
+	VMOVDQU8.Z 0*64(SI), K1, Z0	// load 960 bytes from buf
 	VMOVDQA64 1*64(SI), Z1		// and sum them into Z3:Z2:Z1:Z0
 	VMOVDQA64 2*64(SI), Z4
 	VMOVDQA64 3*64(SI), Z2
 	VMOVDQA64 4*64(SI), Z3
 	VMOVDQA64 5*64(SI), Z5
 	VMOVDQA64 6*64(SI), Z6
+	VPXOR Y8, Y8, Y8		// initialise counters
+	VPXOR Y9, Y9, Y9
 	CSA(Z0, Z1, Z4, Z7)
 	VMOVDQA64 7*64(SI), Z4
 	CSA(Z3, Z2, Z5, Z7)
@@ -110,14 +86,114 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VMOVDQA64 13*64(SI), Z4
 	CSA(Z0, Z5, Z6, Z7)
 	VMOVDQA64 14*64(SI), Z6
+
+	VPBROADCASTD magic<>+16(SB), Z28 // 0x55555555 for transposition
+	VPBROADCASTD magic<>+20(SB), Z27 // 0x33333333 for transposition
+	VPBROADCASTD magic<>+24(SB), Z26 // 0x0f0f0f0f for transposition
+
 	CSA(Z0, Z4, Z6, Z7)
 	CSA(Z1, Z4, Z5, Z7)
 	CSA(Z2, Z3, Z4, Z7)
 
 	ADDQ $15*64, SI
+	SUBQ $(15+16)*64, CX		// enough data left to process?
+	JLT post
 
-	// group nibbles in Z0, Z1, Z2, and Z3 into Z4, Z5, Z6, and Z7
-	VPSRLD $1, Z0, Z4
+	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff
+	VPMOVZXBW magic<>+32(SB), Z23	// transposition vector
+	MOVL $65535-8, AX		// space left til overflow could occur in Z8, Z9
+
+	// load 1024 bytes from buf, add them to Z0..Z3 into Z0..Z4
+vec:	VMOVDQA64 0*64(SI), Z4
+	VMOVDQA64 1*64(SI), Z5
+	VMOVDQA64 2*64(SI), Z6
+	VMOVDQA64 3*64(SI), Z7
+	VMOVDQA64 4*64(SI), Z10
+	CSA(Z0, Z4, Z5, Z22)
+	VMOVDQA64 5*64(SI), Z5
+	VMOVDQA64 6*64(SI), Z11
+	VMOVDQA64 7*64(SI), Z12
+	CSA(Z6, Z7, Z10, Z22)
+	VMOVDQA64 8*64(SI), Z10
+	VMOVDQA64 9*64(SI), Z13
+	VMOVDQA64 10*64(SI), Z14
+	CSA(Z5, Z11, Z12, Z22)
+	VMOVDQA64 11*64(SI), Z12
+	VMOVDQA64 12*64(SI), Z15
+	VMOVDQA64 13*64(SI), Z16
+	CSA(Z10, Z13, Z14, Z22)
+	VMOVDQA64 14*64(SI), Z14
+	VMOVDQA64 15*64(SI), Z17
+	CSA(Z12, Z15, Z16, Z22)
+	CSA(Z0, Z5, Z6, Z22)
+	CSA(Z10, Z12, Z14, Z22)
+	CSA(Z1, Z4, Z7, Z22)
+	CSA(Z11, Z13, Z15, Z22)
+	CSA(Z0, Z10, Z17, Z22)
+	CSA(Z1, Z5, Z11, Z22)
+	CSA(Z2, Z4, Z13, Z22)
+	CSA(Z1, Z10, Z12, Z22)
+	CSA(Z2, Z5, Z10, Z22)
+	CSA(Z3, Z4, Z5, Z22)
+
+	ADDQ $16*64, SI
+
+	// now Z0..Z4 hold counters; preserve Z0..Z3 for next round and
+	// add Z4 to counters.
+
+	// split into even/odd and reduce into crumbs
+	VPANDD Z4, Z28, Z5		// Z5 = bits 02468ace x32
+	VPANDND Z4, Z28, Z6		// Z6 = bits 13579bdf x32
+	VPSRLD $1, Z6, Z6
+	VSHUFI64X2 $0x44, Z6, Z5, Z10
+	VSHUFI64X2 $0xee, Z6, Z5, Z11
+	VPADDD Z10, Z11, Z4		// Z4 = 02468ace x16 ... 13579bdf x16
+
+	// split again and reduce into nibbles
+	VPANDD Z4, Z27, Z5		// Z5 = 048c x16 ... 159d x16
+	VPANDND Z4, Z27, Z6		// Z6 = 26ae x16 ... 37bf x16
+	VPSRLD $2, Z6, Z6
+	VSHUFI64X2 $0x88, Z6, Z5, Z10
+	VSHUFI64X2 $0xdd, Z6, Z5, Z11
+	VPADDD Z10, Z11, Z4		// Z4 = 048c x8  159d x8  26ae x8  37bf x8
+
+	// split again and reduce into bytes (shifted left by 4)
+	VPANDD Z4, Z26, Z5		// Z5 = 08 x8  19 x8  2a x8  3b x8
+	VPANDND Z4, Z26, Z6		// Z6 = 4c x8  5d x8  6e x8  7f x8
+	VPSLLD $4, Z5, Z5
+	VPERMQ $0xd8, Z5, Z5		// Z5 = 08x4 19x4 08x4 19x4  2ax4 3bx4 2ax4 3bx4
+	VPERMQ $0xd8, Z6, Z6		// Z6 = 4cx4 5dx4 4cx4 5dx4  6ex4 7fx4 6ex4 7fx4
+	VSHUFI64X2 $0x88, Z6, Z5, Z10
+	VSHUFI64X2 $0xdd, Z6, Z5, Z11
+	VPADDD Z10, Z11, Z4		// Z4 = 08x4 19x4 2ax4 3bx4 4cx4 5dx4 6ex4 7fx4
+
+	// split again into 16 bit counters
+	VPANDD Z4, Z24, Z5		// Z5 = 0000 1111 2222 3333 4444 5555 6666 7777
+	VPANDND Z4, Z24, Z6
+	VPSRLD $8, Z6, Z6		// Z6 = 8888 9999 aaaa bbbb cccc dddd eeee ffff
+
+	// permute into the right order and accumulate!
+	VPERMW Z5, Z23, Z5		// Z5 = 0123 4567 0123 4567 0123 4567 0123 4567
+	VPERMW Z6, Z23, Z6		// Z6 = 89ab cdef 89ab cdef 89ab cdef 89ab cdef
+	VPADDW Z5, Z8, Z8
+	VPADDW Z6, Z9, Z9
+
+	SUBL $16*8, AX			// account for possible overflow
+	CMPL AX, $16*8			// enough space left in the counters?
+	JGE have_space
+
+	// flush accumulators into counters
+	CALL *BX			// call accumulation function
+	VPXOR Y8, Y8, Y8		// clear accumulators for next round
+	VPXOR Y9, Y9, Y9
+	MOVL $65535, AX			// space left til overflow could occur
+
+have_space:
+	SUBQ $16*64, CX			// account for bytes consumed
+	JGE vec
+
+	// sum up Z0..Z3 into the counter registers
+post:	VPSRLD $1, Z0, Z4		// group nibbles in Z0--Z3 into Z4--Z7
 	VPADDD Z1, Z1, Z5
 	VPSRLD $1, Z2, Z6
 	VPADDD Z3, Z3, Z7
@@ -193,24 +269,10 @@ vec:	VMOVDQA64 0*64(SI), Z0		// load 960 bytes from buf
 	VPADDW Z1, Z8, Z8
 	VPADDW Z2, Z9, Z9
 
-	SUBL $15*8, AX			// account for possible overflow
-	CMPL AX, $15*8			// enough space left in the counters?
-	JGE have_space
-
-	// flush accumulators into counters
-	CALL *BX			// call accumulation function
-	VPXOR Y8, Y8, Y8		// clear accumulators for next round
-	VPXOR Y9, Y9, Y9
-	MOVL $65535, AX			// space left til overflow could occur
-
-have_space:
-	SUBQ $15*64, CX			// account for bytes consumed
-	JGE vec
-
 endvec:	VPXOR Y0, Y0, Y0		// counter register
 
 	// process tail, 8 bytes at a time
-	SUBL $8-15*64, CX		// 8 bytes left to process?
+	SUBL $8-16*64, CX		// 8 bytes left to process?
 	JLT tail1
 
 tail8:	VPBROADCASTQ (SI), Z4
@@ -219,7 +281,7 @@ tail8:	VPBROADCASTQ (SI), Z4
 	SUBL $8, CX
 	VPTESTMB Z31, Z4, K1
 	VPSUBB Z30, Z0, K1, Z0
-	JGE tail8
+	JGT tail8
 
 	// process remaining 0--7 bytes
 tail1:	SUBL $-8, CX
@@ -242,6 +304,39 @@ end:	VPUNPCKLBW Z25, Z0, Z1
 	VPADDW Z2, Z9, Z9
 
 	// and perform a final accumulation
+	CALL *BX
+	VZEROUPPER
+	RET
+
+	// special processing for when the data is less than
+	// one iteration of the kernel
+runt:	VPXOR Y0, Y0, Y0		// counter register
+	SUBL $8, CX			// 8 bytes left to process?
+	JLT runt1
+
+runt8:	VPBROADCASTQ (SI), Z4
+	ADDQ $8, SI
+	VPSHUFB Z29, Z4, Z4
+	SUBL $8, CX
+	VPTESTMB Z31, Z4, K1
+	VPSUBB Z30, Z0, K1, Z0
+	JGE runt8
+
+	// process remaining 0--8 bytes
+runt1:	ADDL $8, CX
+	XORL AX, AX
+	BTSL CX, AX			// 1 << CX
+	DECL AX				// mask of CX ones
+	KMOVD AX, K1
+	VMOVDQU8.Z (SI), K1, X4
+	VPBROADCASTQ X4, Z4
+	VPSHUFB Z29, Z4, Z4
+	VPTESTMB Z31, Z4, K1
+	VPSUBB Z30, Z0, K1, Z0
+
+	// populate counters and accumulate
+runt0:	VPUNPCKLBW Z25, Z0, Z8
+	VPUNPCKHBW Z25, Z0, Z9
 	CALL *BX
 	VZEROUPPER
 	RET

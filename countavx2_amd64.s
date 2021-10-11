@@ -1,10 +1,8 @@
 #include "textflag.h"
 
-// AVX2 based kernels for the positional population count operation.
-// All these kernels have the same backbone based on a 15-fold CSA
-// reduction to first reduce 480 byte into 4x32 byte, followed by a
-// bunch of shuffles to group the positional registers into nibbles.
-// These are then summed up using a width-specific summation function.
+// An AVX2 based kernel first doing a 15-fold CSA reduction and then
+// a 16-fold CSA reduction, carrying over place-value vectors between
+// iterations.
 // Required CPU extension: AVX2.
 
 // magic transposition constants, comparison constants
@@ -16,7 +14,8 @@ DATA magic<>+32(SB)/8, $0x8040201008040201
 DATA magic<>+40(SB)/4, $0x55555555
 DATA magic<>+44(SB)/4, $0x33333333
 DATA magic<>+48(SB)/4, $0x0f0f0f0f
-GLOBL magic<>(SB), RODATA|NOPTR, $52
+DATA magic<>+52(SB)/4, $0x00ff00ff
+GLOBL magic<>(SB), RODATA|NOPTR, $56
 
 // sliding window for head/tail loads.  Unfortunately, there doesn't seem to be
 // a good way to do this with less memory wasted.
@@ -38,82 +37,46 @@ GLOBL window<>(SB), RODATA|NOPTR, $64
 	VPXOR A, C, A \
 	VPOR  B, D, B
 
+// count 4 bytes from L and 4 bytes from H into Y0 and Y1,
+// using Y4, and Y5 for scratch space
+#define COUNT8(L, H) \
+	VPBROADCASTD L, Y4 \	// Y4 = 3210:3210:3210:3210:3210:3210:3210:3210
+	VPBROADCASTD H, Y5 \
+	VPSHUFB Y3, Y4, Y4 \	// Y4 = 3333:3333:2222:2222:1111:1111:0000:0000
+	VPSHUFB Y3, Y5, Y5 \
+	VPAND Y2, Y4, Y4 \	// mask out one bit in each copy of the bytes
+	VPAND Y2, Y5, Y5 \
+	VPCMPEQB Y2, Y4, Y4 \	// set bytes to -1 if the bits were set
+	VPCMPEQB Y2, Y5, Y5 \	// or to 0 otherwise
+	VPSUBB Y4, Y0, Y0 \	// add 1/0 (subtract -1/0) to counters
+	VPSUBB Y5, Y1, Y1
+
+
 // Generic kernel.  This function expects a pointer to a width-specific
 // accumulation function in BX, a possibly unaligned input buffer in SI,
 // counters in DI and a remaining length in CX.
-TEXT countavx<>(SB), NOSPLIT, $32-0
-	TESTQ CX, CX			// any data to process at all?
-	CMOVQEQ CX, SI			// if not, avoid loading head
-
-	// constants for processing the head
+TEXT countavx2<>(SB), NOSPLIT, $0-0
+	// constants for processing the head and tail
 	VPBROADCASTQ magic<>+32(SB), Y2	// bit position mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
 	VPXOR Y7, Y7, Y7		// zero register
-	VPXOR Y0, Y0, Y0		// lower counter register
-	VPXOR Y1, Y1, Y1		// upper counter register
 
-	// load head into scratch space (until alignment/end is reached)
+	CMPQ CX, $15*32			// is the CSA kernel worth using?
+	JLT runt
+
+	// load head until alignment/end is reached
 	MOVL SI, DX
 	ANDL $31, DX			// offset of the buffer start from 32 byte alignment
-	JEQ nohead			// if source buffer is aligned, skip head processing
 	MOVL $32, AX
 	SUBL DX, AX			// number of bytes til alignment is reached (head length)
-	VMOVDQA -32(SI)(AX*1), Y4	// load head
+	SUBQ DX, SI			// align source to 32 bytes
+	VMOVDQA (SI), Y0		// load head
+	ADDQ DX, CX			// and account for head length
 	LEAQ window<>(SB), DX		// load window mask base pointer
-	VMOVDQU (DX)(AX*1), Y5		// load mask of the bytes that are part of the head
-	VPAND Y5, Y4, Y4		// and mask out those bytes that are not
-	CMPQ AX, CX			// is the head shorter than the buffer?
-	JLT norunt			// if yes, perform special processing
+	VPAND (DX)(AX*1), Y0, Y0	// mask out bytes not in head
 
-	// buffer is short and does not cross a 32 byte boundary
-	SUBL CX, AX			// number of bytes by which we overshoot the buffer
-	VMOVDQU (DX)(AX*1), Y5		// load mask of bytes that overshoot the buffer
-	VPANDN Y4, Y5, Y4		// and clear them in Y4
-	MOVL CX, AX			// set up the true prefix length
-
-norunt:	VMOVDQU Y4, scratch-32(SP)	// copy to scratch space
-	SUBQ AX, CX			// mark head as accounted for
-	MOVL SI, DX			// keep a copy of the head pointer
-	ADDQ AX, SI			// and advance past head
-
-	ANDL $31, DX			// compute misalignment again
-	SHRL $3, DX			// misalignment in qwords (rounded down)
-	ANDL $3, DX			// and reduced to range 0--3
-
-	// process head, 8 bytes at a time (up to 4 times)
-head:	VPBROADCASTD scratch-32+0(SP)(DX*8), Y4
-					// Y4 = 3210:3210:3210:3210:3210:3210:3210:3210
-	VPBROADCASTD scratch-32+4(SP)(DX*8), Y5
-	VPSHUFB Y3, Y4, Y4		// Y4 = 3333:3333:2222:2222:1111:1111:0000:0000
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4		// mask out one bit in each copy of the bytes
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4		// set bytes to -1 if the bits were set
-	VPCMPEQB Y2, Y5, Y5		// or to 0 otherwise
-	VPSUBB Y4, Y0, Y0		// add 1/0 (subtract -1/0) to counters
-	VPSUBB Y5, Y1, Y1
-	ADDL $1, DX
-	CMPL DX, $4			// have we processed the full head?
-	JLT head
-
-	// initialise counters to what we have
-nohead:	VPUNPCKLBW Y7, Y0, Y8		// 0-7, 16-23
-	VPUNPCKHBW Y7, Y0, Y9		// 8-15, 24-31
-	VPUNPCKLBW Y7, Y1, Y10		// 32-39, 48-55
-	VPUNPCKHBW Y7, Y1, Y11		// 40-47, 56-63
-
-	SUBQ $15*32, CX			// enough data left to process?
-	JLT endvec			// also, pre-subtract
-
-	VPBROADCASTD magic<>+40(SB), Y15 // 0x55555555 for transposition
-	VPBROADCASTD magic<>+44(SB), Y13 // 0x33333333 for transposition
-	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f for deinterleaving the nibbles
-
-	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
-
-vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
-	VMOVDQA 1*32(SI), Y1		// and sum them into Y3:Y2:Y1:Y0
-	VMOVDQA 2*32(SI), Y4
+	VMOVDQA 1*32(SI), Y1		// load 480 (-32) bytes from buf
+	VMOVDQA 2*32(SI), Y4		// and sum them into Y3:Y2:Y1:Y0
 	VMOVDQA 3*32(SI), Y2
 	VMOVDQA 4*32(SI), Y3
 	VMOVDQA 5*32(SI), Y5
@@ -134,14 +97,123 @@ vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
 	VMOVDQA 13*32(SI), Y4
 	CSA(Y0, Y5, Y6, Y7)
 	VMOVDQA 14*32(SI), Y6
+	VPBROADCASTD magic<>+40(SB), Y15 // 0x55555555
+	VPBROADCASTD magic<>+44(SB), Y13 // 0x33333333
 	CSA(Y0, Y4, Y6, Y7)
+	VPXOR Y8, Y8, Y8		// initialise counters
+	VPXOR Y9, Y9, Y9
 	CSA(Y1, Y4, Y5, Y7)
+	VPXOR Y10, Y10, Y10
+	VPXOR Y11, Y11, Y11
 	CSA(Y2, Y3, Y4, Y7)
 
 	ADDQ $15*32, SI
+	SUBQ $(15+16)*32, CX		// enough data left to process?
+	JLT post
+
+	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
+
+	// load 512 bytes from buf, add them to Y0..Y3 into Y0..Y4
+vec:	VMOVDQA 0*32(SI), Y4
+	VMOVDQA 1*32(SI), Y5
+	VMOVDQA 2*32(SI), Y6
+	VMOVDQA 3*32(SI), Y12
+	VMOVDQA 4*32(SI), Y14
+	CSA(Y0, Y4, Y5, Y7)
+	VMOVDQA 5*32(SI), Y5
+	CSA(Y6, Y12, Y14, Y7)
+	VMOVDQA 6*32(SI), Y14
+	CSA(Y1, Y4, Y12, Y7)
+	VMOVDQA 7*32(SI), Y12
+	CSA(Y0, Y5, Y6, Y7)
+	VMOVDQA 8*32(SI), Y6
+	CSA(Y6, Y12, Y14, Y7)
+	VMOVDQA 9*32(SI), Y14
+	CSA(Y1, Y5, Y12, Y7)
+	VMOVDQA 10*32(SI), Y12
+	CSA(Y0, Y12, Y14, Y7)
+	VMOVDQA 11*32(SI), Y14
+	CSA(Y2, Y4, Y5, Y7)
+	VMOVDQA 12*32(SI), Y5
+	CSA(Y0, Y6, Y14, Y7)
+	VMOVDQA 13*32(SI), Y14
+	CSA(Y1, Y6, Y12, Y7)
+	VMOVDQA 14*32(SI), Y12
+	CSA(Y5, Y12, Y14, Y7)
+	VMOVDQA 15*32(SI), Y14
+	CSA(Y0, Y5, Y14, Y7)
+	CSA(Y1, Y5, Y12, Y7)
+	CSA(Y2, Y5, Y6, Y7)
+	CSA(Y3, Y4, Y5, Y7)
+
+	ADDQ $16*32, SI
+
+	VPBROADCASTD magic<>+52(SB), Y12 // 0x00ff00ff
+	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f
+
+	// now Y0..Y4 hold counters; preserve Y0..Y4 for the next round
+	// and add Y4 to the counters.
+
+	// split into even/odd and reduce into crumbs
+	VPAND Y4, Y15, Y5		// Y5 = 02468ace x16
+	VPANDN Y4, Y15, Y6		// Y6 = 13579bdf x16
+	VPSRLD $1, Y6, Y6
+	VPERM2I128 $0x20, Y6, Y5, Y4
+	VPERM2I128 $0x31, Y6, Y5, Y5
+	VPADDD Y5, Y4, Y4		// Y4 = 02468ace x8 13579bdf x8
+
+	// split again and reduce into nibbles
+	VPAND Y4, Y13, Y5		// Y5 = 048c x8 159d x8
+	VPANDN Y4, Y13, Y6		// Y6 = 26ae x8 37bf x8
+	VPSRLD $2, Y6, Y6
+	VPUNPCKLQDQ Y6, Y5, Y4
+	VPUNPCKHQDQ Y6, Y5, Y5
+	VPADDD Y5, Y4, Y4		// Y4 = 048c x4 26ae x4 159d x4 37bf x4
+
+	// split again into bytes and shuffle into order
+	VPAND Y4, Y14, Y5		// Y5 = 08 x4 2a x4 19 x4 3b x4
+	VPANDN Y4, Y14, Y6		// Y4 = 4c x4 6e x4 5d x4 7f x4
+	VPSLLD $4, Y5, Y5
+	VPERM2I128 $0x20, Y6, Y5, Y4	// Y4 = 08 x4 2a x4 4c x4 6e x4
+	VPERM2I128 $0x31, Y6, Y5, Y5	// Y5 = 19 x4 3b x4 5d x4 7f x4
+	VPUNPCKLWD Y5, Y4, Y6		// Y6 = 0819 x4 4c5d x4
+	VPUNPCKHWD Y5, Y4, Y7		// Y7 = 2a3b x4 6e7f x4
+	VPUNPCKLDQ Y7, Y6, Y4		// Y4 = 08192a3b[0:1] 4c5d6e7f[0:1]
+	VPUNPCKHDQ Y7, Y6, Y5		// Y5 = 08192a3b[2:3] 4c5d6e7f[2:3]
+	VPERMQ $0xd8, Y4, Y4		// Y4 = 08192a3b4c5d6e7f[0:1]
+	VPERMQ $0xd8, Y5, Y5		// Y5 = 08192a3b4c5d6e7f[2:3]
+
+	// split again into words and add to counters
+	VPAND Y4, Y12, Y6		// Y6 = 01234567[0:1]
+	VPAND Y5, Y12, Y7		// Y7 = 01234567[2:3]
+	VPANDN Y4, Y12, Y4
+	VPANDN Y5, Y12, Y5
+	VPADDW Y6, Y8, Y8
+	VPADDW Y7, Y10, Y10
+	VPSRLD $8, Y4, Y4		// Y4 = 89abcdef[0:1]
+	VPSRLD $8, Y5, Y5		// Y5 = 89abcdef[2:3]
+	VPADDW Y4, Y9, Y9
+	VPADDW Y5, Y11, Y11
+
+	SUBL $16*4, AX			// account for possible overflow
+	CMPL AX, $16*4			// enough space left in the counters?
+	JGE have_space
+
+	// flush accumulators into counters
+	CALL *BX			// call accumulation function
+	VPXOR Y8, Y8, Y8		// clear accumulators for next round
+	VPXOR Y9, Y9, Y9
+	VPXOR Y10, Y10, Y10
+	VPXOR Y11, Y11, Y11
+
+	MOVL $65535, AX			// space left til overflow could occur
+
+have_space:
+	SUBQ $16*32, CX			// account for bytes consumed
+	JGE vec
 
 	// group nibbles in Y0, Y1, Y2, and Y3 into Y4, Y5, Y6, and Y7
-	VPADDD Y15, Y15, Y12		// 0xaaaaaaaa
+post:	VPBROADCASTD magic<>+48(SB), Y14 // 0x0f0f0f0f
 
 	VPAND Y1, Y15, Y5
 	VPADDD Y5, Y5, Y5
@@ -152,16 +224,14 @@ vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
 	VPOR Y4, Y5, Y4			// Y4 = eca86420 (low crumbs)
 	VPOR Y6, Y7, Y5			// Y5 = eca86420 (high crumbs)
 
-	VPAND Y0, Y12, Y0
+	VPANDN Y0, Y15, Y0
 	VPSRLD $1, Y0, Y0
-	VPAND Y2, Y12, Y2
+	VPANDN Y2, Y15, Y2
 	VPSRLD $1, Y2, Y2
-	VPAND Y1, Y12, Y1
-	VPAND Y3, Y12, Y3
+	VPANDN Y1, Y15, Y1
+	VPANDN Y3, Y15, Y3
 	VPOR Y0, Y1, Y6			// Y6 = fdb97531 (low crumbs)
 	VPOR Y2, Y3, Y7			// Y7 = fdb97531 (high crumbs)
-
-	VPSLLD $2, Y13, Y12		// 0xcccccccc
 
 	VPAND Y5, Y13, Y1
 	VPSLLD $2, Y1, Y1
@@ -172,12 +242,12 @@ vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
 	VPOR Y0, Y1, Y0			// Y0 = c840
 	VPOR Y2, Y3, Y1			// Y1 = d951
 
-	VPAND Y4, Y12, Y4
+	VPANDN Y4, Y13, Y4
 	VPSRLD $2, Y4, Y4
-	VPAND Y6, Y12, Y6
+	VPANDN Y6, Y13, Y6
 	VPSRLD $2, Y6, Y6
-	VPAND Y5, Y12, Y5
-	VPAND Y7, Y12, Y7
+	VPANDN Y5, Y13, Y5
+	VPANDN Y7, Y13, Y7
 	VPOR Y4, Y5, Y2			// Y2 = ea62
 	VPOR Y6, Y7, Y3			// Y3 = fb73
 
@@ -235,43 +305,17 @@ vec:	VMOVDQA 0*32(SI), Y0		// load 480 bytes from buf
 	VPADDW Y6, Y10, Y10
 	VPADDW Y1, Y11, Y11
 
-	SUBL $15*4, AX			// account for possible overflow
-	CMPL AX, $15*4			// enough space left in the counters?
-	JGE have_space
-
-	// flush accumulators into counters
-	CALL *BX			// call accumulation function
-	VPXOR Y8, Y8, Y8		// clear accumulators for next round
-	VPXOR Y9, Y9, Y9
-	VPXOR Y10, Y10, Y10
-	VPXOR Y11, Y11, Y11
-
-	MOVL $65535, AX			// space left til overflow could occur
-
-have_space:
-	SUBQ $15*32, CX			// account for bytes consumed
-	JGE vec
-
 endvec:	VPBROADCASTQ magic<>+32(SB), Y2	// byte mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
 	VPXOR Y0, Y0, Y0		// lower counter register
 	VPXOR Y1, Y1, Y1		// upper counter register
 
 	// process tail, 8 bytes at a time
-	SUBL $8-15*32, CX		// 8 bytes left to process?
+	SUBL $8-16*32, CX		// 8 bytes left to process?
 	JLT tail1
 
-tail8:	VPBROADCASTD 0(SI), Y4
-	VPBROADCASTD 4(SI), Y5
+tail8:	COUNT8(0(SI), 4(SI))
 	ADDQ $8, SI
-	VPSHUFB Y3, Y4, Y4
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4
-	VPCMPEQB Y2, Y5, Y5
-	VPSUBB Y4, Y0, Y0
-	VPSUBB Y5, Y1, Y1
 	SUBL $8, CX
 	JGE tail8
 
@@ -279,24 +323,14 @@ tail8:	VPBROADCASTD 0(SI), Y4
 tail1:	SUBL $-8, CX			// anything left to process?
 	JLE end
 
-	VMOVQ (SI), X5			// load 8 byte from buffer.  This is ok
+	VMOVQ (SI), X6			// load 8 byte from buffer.  This is ok
 					// as buffer is aligned to 8 byte here
 	MOVQ $window<>+32(SB), AX	// load window address
 	SUBQ CX, AX			// adjust mask pointer
-	VMOVQ (AX), X6			// load window mask
-	VPANDN X5, X6, X5		// and mask out the desired bytes
-
-	VPBROADCASTD X5, Y4
-	VPSRLDQ $4, X5, X5
-	VPBROADCASTD X5, Y5
-	VPSHUFB Y3, Y4, Y4
-	VPSHUFB Y3, Y5, Y5
-	VPAND Y2, Y4, Y4
-	VPAND Y2, Y5, Y5
-	VPCMPEQB Y2, Y4, Y4
-	VPCMPEQB Y2, Y5, Y5
-	VPSUBB Y4, Y0, Y0
-	VPSUBB Y5, Y1, Y1
+	VMOVQ (AX), X5			// load window mask
+	VPANDN X6, X5, X6		// and mask out the desired bytes
+	VPSRLDQ $4, X6, X5		// obtain second dword in X5
+	COUNT8(X6, X5)
 
 	// add tail to counters
 end:	VPXOR Y7, Y7, Y7
@@ -312,6 +346,57 @@ end:	VPXOR Y7, Y7, Y7
 
 	// and perform a final accumulation
 	VPXOR Y7, Y7, Y7
+	CALL *BX
+	VZEROUPPER
+	RET
+
+	// buffer is short, do just head/tail processing
+runt:	VPXOR Y0, Y0, Y0		// lower counter register
+	VPXOR Y1, Y1, Y1		// upper counter register
+	SUBL $8, CX			// 8 byte left to process?
+	JLT runt1
+
+	// process runt, 8 bytes at a time
+runt8:	COUNT8(0(SI), 4(SI))
+	ADDQ $8, SI
+	SUBL $8, CX
+	JGE runt8
+
+	// process remaining 0--7 byte
+	// while making sure we don't get a page fault
+runt1:	ADDL $8, CX			// anything left to process?
+	JLE runt_accum
+
+	MOVL SI, AX
+	ANDL $7, AX			// offset from 8 byte alignment
+	LEAL (AX)(CX*1), DX		// length of buffer plus alignment
+	SHLL $3, CX			// remaining length in bits
+	MOVQ $-1, R9
+	SHLQ CX, R9			// mask of bits where R8 is out of range
+	CMPL DX, $8			// if this exceeds the alignment boundary
+	JGE crossrunt1			// we can safely load directly
+
+	ANDQ $~7, SI			// align buffer to 8 bytes
+	MOVQ (SI), R8			// and load 8 bytes from buffer
+	SHLL $3, AX			// offset from 8 byte alignment in bits
+	SHRXQ AX, R8, R8		// buffer starting at the beginning
+	ANDNQ R8, R9, R8
+	JMP dorunt1
+
+crossrunt1:
+	ANDNQ (SI), R9, R8		// load 8 bytes from unaligned buffer
+
+dorunt1:VMOVQ R8, X6
+	VPSRLDQ $4, X6, X5
+	COUNT8(X6, X5)
+
+	// move tail to counters and perform final accumulation
+runt_accum:
+	VPXOR Y7, Y7, Y7
+	VPUNPCKLBW Y7, Y0, Y8
+	VPUNPCKHBW Y7, Y0, Y9
+	VPUNPCKLBW Y7, Y1, Y10
+	VPUNPCKHBW Y7, Y1, Y11
 	CALL *BX
 	VZEROUPPER
 	RET
@@ -416,7 +501,7 @@ TEXT ·count8avx2(SB), 0, $0-32
 	MOVQ buf_base+8(FP), SI		// SI = &buf[0]
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 	MOVQ $accum8<>(SB), BX
-	CALL countavx<>(SB)
+	CALL countavx2<>(SB)
 	RET
 
 // func count16avx2(counts *[16]int, buf []uint16)
@@ -426,7 +511,7 @@ TEXT ·count16avx2(SB), 0, $0-32
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 	MOVQ $accum16<>(SB), BX
 	SHLQ $1, CX			// count in bytes
-	CALL countavx<>(SB)
+	CALL countavx2<>(SB)
 	RET
 
 // func count32avx2(counts *[32]int, buf []uint32)
@@ -436,7 +521,7 @@ TEXT ·count32avx2(SB), 0, $0-32
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 	MOVQ $accum32<>(SB), BX
 	SHLQ $2, CX			// count in bytes
-	CALL countavx<>(SB)
+	CALL countavx2<>(SB)
 	RET
 
 // func count64avx2(counts *[64]int, buf []uint64)
@@ -446,5 +531,5 @@ TEXT ·count64avx2(SB), 0, $0-32
 	MOVQ buf_len+16(FP), CX		// CX = len(buf)
 	MOVQ $accum64<>(SB), BX
 	SHLQ $3, CX			// count in bytes
-	CALL countavx<>(SB)
+	CALL countavx2<>(SB)
 	RET

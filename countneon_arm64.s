@@ -2,11 +2,9 @@
 
 #include "textflag.h"
 
-// SIMD kernel for the positional population count operation.  All these
-// kernels have the same backbone based on a 15-fold CSA reduction to
-// first reduce 240 byte into 4x16 byte, followed by a bunch of shuffles
-// to group the positional registers into nibbles.  These are then
-// summed up using a width-specfic summation function.
+// A NEON based kernel first doing a 15-fold CSA reduction and then a
+// 16-fold CSA reduction, carrying over place-value vectors between
+// iterations.
 
 // magic transposition constants, sliding window
 DATA magic<>+ 0(SB)/8, $0x8040201008040201
@@ -42,9 +40,6 @@ GLOBL magic<>(SB), RODATA|NOPTR, $40
 // accumulation function in R0, a possibly unaligned input buffer in R1,
 // counters in R2 and a remaining length in R3.
 TEXT countneon<>(SB), NOSPLIT, $0-0
-	TST R3, R3			// any data to process at all?
-	CSEL EQ, ZR, R1, R1		// if yes, avoid loading head
-
 	// constant for processing the head
 	MOVD $magic<>(SB), R4
 	VLD1R.P 8(R4), [V28.D2]		// 80402010080402018040201008040201
@@ -56,75 +51,145 @@ TEXT countneon<>(SB), NOSPLIT, $0-0
 	VMOVI $0, V12.B16
 	VMOVI $0, V14.B16
 
+	CMP $15*16, R3			// is the CSA kernel worth using?
+	BLT runt
+
 	// load head until alignment/end is reached
-	AND $15, R1, R5			// offset of the buffer start from 16 byte alignment
-	CBZ R5, nohead			// if source buffer is aligned skip head processing
-	SUB $16, R5, R5			// negated number of bytes til alignment is reached
+	AND $15, R1, R6			// offset of the buffer start from 16 byte alignment
 	AND $~15, R1, R1		// align the source buffer pointer
+	SUB $16, R6, R5			// negated number of bytes til alignment is reached
+	ADD R6, R3, R3			// account for head length in CX
 	NEG R5, R5			// number of bytes til alignment is reached
 	VLD1.P 16(R1), [V3.B16]		// load head, advance past it
 //	VMOVQ (R4)(R5), V5		// load mask of bytes that are part of the head
 	WORD $0x3ce56885
-	VAND V5.B16, V3.B16, V3.B16	// and mask out those bytes that are not
-	CMP R3, R5			// is the head shorter than the buffer?
-	BLT norunt
+	VAND V5.B16, V3.B16, V0.B16	// and mask out those bytes that are not
 
-	// buffer is short and does not cross a 16 byte boundary
-	SUB R3, R5, R5			// number of bytes by which we overshoot the buffer
-//	VMOVQ (R4)(R5), V5		// load mask of bytes that overshoot the buffer
-	WORD $0x3ce56885
-//	VBIC V5.B16, V3.B16, V3.B16	// and clear them
-	WORD $0x4e651c63
-	MOVD R5, R3			// set up true prefix length
-
-norunt:	SUB R5, R3, R3			// mark head as accounted for
-
-	// process head in increments of 2 bytes
-	COUNT4(V8, V10, V3)
-	VMOV V3.S[1], V3.S[0]
-	COUNT4(V12, V14, V3)
-	VMOV V3.S[2], V3.S[0]
-	COUNT4(V8, V10, V3)
-	VMOV V3.S[3], V3.S[0]
-	COUNT4(V12, V14, V3)
-
-	// initialise counters in V8--V15 to what we have
-nohead:	VUXTL V8.B8, V9.H8		//  8--15
-	VUXTL2 V8.B16, V8.H8		//  0-- 7
-	VUXTL V10.B8, V11.H8		// 24--31
-	VUXTL2 V10.B16, V10.H8		// 16--23
-	VUXTL V12.B8, V13.H8		// 40--47
-	VUXTL2 V12.B16, V12.H8		// 32--39
-	VUXTL V14.B8, V15.H8		// 56--63
-	VUXTL2 V14.B16, V14.H8		// 48--55
-
-	SUBS $15*16, R3, R3		// enough data to process?
-	BLT endvec
-
-	MOVD $65535-4, R6		// space left til overflow could occur in V8--V15
-
-	VMOVI $0x55, V27.B16		// 55555555 for transposition
-	VMOVI $0x33, V26.B16		// 33333333 for transposition
-	VMOVI $0x0f, V25.B16		// 0f0f0f0f for extracting nibbles
-
-vec:	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
+	// load 15 registers worth of data and accumulate into V3--V0
+	VLD1.P 2*16(R1), [V1.B16, V2.B16]
 	VLD1.P 4*16(R1), [V3.B16, V4.B16, V5.B16, V6.B16]
 	VLD1.P 4*16(R1), [V16.B16, V17.B16, V18.B16, V19.B16]
 	CSA(V0, V1, V2)
+	VMOVI $0x55, V27.B16		// 55555555 for transposition
 	CSAC(V0, V3, V4, V2)
+	VMOVI $0x33, V26.B16		// 33333333 for transposition
 	CSAC(V0, V5, V6, V3)
 	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 	CSA(V1, V2, V3)
 	CSA(V0, V16, V17)
+	VMOVI $0x0f, V25.B16		// 0f0f0f0f for extracting nibbles
 	CSA(V0, V18, V19)
+	MOVD $65535-4, R6		// space left til overflow could occur in V8--V15
 	CSAC(V1, V16, V18, V3)
+	VMOVI $0, V9.B16
 	CSA(V0, V4, V5)
+	VMOVI $0, V11.B16
 	CSA(V0, V6, V7)
+	VMOVI $0, V13.B16
 	CSA(V1, V4, V6)
+	VMOVI $0, V15.B16
 	CSA(V2, V3, V4)
 
+	SUBS $(15+16)*16, R3, R3	// enough data left to process?
+	BLT post
+
+	// load 16 registers worth of data and accumulate into V4--V0
+vec:	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
+	VLD1.P 4*16(R1), [V16.B16, V17.B16, V18.B16, V19.B16]
+	VLD1.P 4*16(R1), [V20.B16, V21.B16, V22.B16, V23.B16]
+	CSA(V4, V5, V6)
+	CSA(V0, V17, V19)
+	CSA(V7, V16, V18)
+	CSA(V21, V22, V20)
+	CSA(V1, V5, V17)
+	VLD1.P 4*16(R1), [V17.B16, V18.B16, V19.B16, V20.B16]
+	CSA(V0, V4, V7)
+	CSA(V17, V18, V23)
+	CSA(V19, V20, V21)
+	CSA(V16, V18, V22)
+	CSA(V1, V4, V20)
+	CSA(V0, V17, V19)
+	CSA(V2, V5, V18)
+	CSA(V1, V16, V17)
+	CSA(V2, V4, V16)
+	CSA(V3, V4, V5)
+
+	// now V0..V4 hold counters; preserve V0..V3 for the next round and
+	// add V4 to counters.
+
+	// split into even/odd and reduce into crumbs
+	VAND V27.B16, V4.B16, V5.B16	// V5 = bits 02468ace x8
+//	VBIC V27.B16, V4.B16, V6.B16	// V6 = bits 13579bdf x8
+	WORD $0x4e7b1c86
+	VUSHR $1, V6.B16, V6.B16
+	VZIP1 V6.D2, V5.D2, V4.D2
+	VZIP2 V6.D2, V5.D2, V5.D2
+	VADD V5.B16, V4.B16, V4.B16	// V4 = 02468ace x4 13579bdf x4
+
+	// split again into nibbles
+	VAND V26.B16, V4.B16, V5.B16	// V5 = 048c x4 159d x4
+//	VBIC V26.B16, V4.B16, V6.B16	// V6 = 26ae x4 37bf x4
+	WORD $0x4e7a1c86
+	VUSHR $2, V6.B16, V6.B16
+
+	// split again into bytes and shuffle into order (also scale)
+	VAND V25.B16, V5.B16, V4.B16	// V4 = 08 x4 19 x4
+//	VBIC V25.B16, V5.B16, V5.B16	// V5 = 4c x4 5d x4
+	WORD $0x4e791ca5
+//	VBIC V25.B16, V6.B16, V7.B16	// V7 = 6e x4 7f x4
+	WORD $0x4e791cc7
+	VAND V25.B16, V6.B16, V6.B16	// V6 = 2a x4 3b x4
+	VSHL $4, V4.B16, V4.B16
+	VSHL $4, V6.B16, V6.B16
+
+	VZIP1 V6.B16, V4.B16, V16.B16	// V16 = 028a x4
+	VZIP2 V6.B16, V4.B16, V17.B16	// V17 = 139b x4
+	VZIP1 V7.B16, V5.B16, V18.B16	// V18 = 46ce x4
+	VZIP2 V7.B16, V5.B16, V19.B16	// V19 = 57df x4
+
+	VZIP1 V17.B16, V16.B16, V4.B16	// V4 = 012389ab[0:1]
+	VZIP2 V17.B16, V16.B16, V5.B16	// V5 = 012389ab[2:3]
+	VZIP1 V19.B16, V18.B16, V6.B16	// V6 = 4567cdef[0:1]
+	VZIP2 V19.B16, V18.B16, V7.B16	// V7 = 4567cdef[2:3]
+
+	VZIP1 V6.S4, V4.S4, V16.S4	// V16 = 01234567[0:1]
+	VZIP2 V6.S4, V4.S4, V17.S4	// V17 = 89abcdef[0:1]
+	VZIP1 V7.S4, V5.S4, V18.S4	// V18 = 01234567[2:3]
+	VZIP2 V7.S4, V5.S4, V19.S4	// V19 = 89abcdef[2:3]
+
+	// add to counters
+	VUADDW V16.B8, V8.H8, V8.H8
+	VUADDW2 V16.B16, V9.H8, V9.H8
+	VUADDW V17.B8, V10.H8, V10.H8
+	VUADDW2 V17.B16, V11.H8, V11.H8
+	VUADDW V18.B8, V12.H8, V12.H8
+	VUADDW2 V18.B16, V13.H8, V13.H8
+	VUADDW V19.B8, V14.H8, V14.H8
+	VUADDW2 V19.B16, V15.H8, V15.H8
+
+	SUB $15*2, R6, R6		// account for possible overflow
+	CMP $15*2, R6			// enough space left in the counters?
+
+	BGE have_space
+
+	CALL *R0			// call accumulation function
+	VMOVI $0, V8.B16		// clear counters for next round
+	VMOVI $0, V9.B16
+	VMOVI $0, V10.B16
+	VMOVI $0, V11.B16
+	VMOVI $0, V12.B16
+	VMOVI $0, V13.B16
+	VMOVI $0, V14.B16
+	VMOVI $0, V15.B16
+
+	MOVD $65535, R6			// space left til overflow could occur
+
+have_space:
+	SUBS $16*16, R3, R3		// account for bytes consumed
+	BGE vec
+
 	// group V0--V3 into nibbles in the same register
-	VUSHR $1, V0.B16, V4.B16
+post:	VUSHR $1, V0.B16, V4.B16
 	VADD V1.B16, V1.B16, V5.B16
 	VUSHR $1, V2.B16, V6.B16
 	VADD V3.B16, V3.B16, V7.B16
@@ -144,9 +209,9 @@ vec:	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
 
 	// pre-shuffle nibbles
 	VZIP1 V3.B16, V2.B16, V6.B16	// V6 = fbea7362 (3:2:1:0)
-	VZIP2 V3.B16, V2.B16, V3.B16	// V1 = fbea7362 (7:6:5:4)
+	VZIP2 V3.B16, V2.B16, V3.B16	// V3 = fbea7362 (7:6:5:4)
 	VZIP1 V1.B16, V0.B16, V5.B16	// V5 = d9c85140 (3:2:1:0)
-	VZIP2 V1.B16, V0.B16, V2.B16	// V0 = d9c85140 (7:6:5:4)
+	VZIP2 V1.B16, V0.B16, V2.B16	// V2 = d9c85140 (7:6:5:4)
 	VZIP1 V6.H8, V5.H8, V4.H8	// V4 = fbead9c873625140 (1:0)
 	VZIP2 V6.H8, V5.H8, V5.H8	// V5 = fbead9c873625140 (3:2)
 	VZIP1 V3.H8, V2.H8, V6.H8	// V6 = fbead9c873625150 (5:4)
@@ -170,9 +235,6 @@ vec:	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
 	VZIP1 V5.S4, V1.S4, V6.S4	// V6 = fedcba987654 (2)
 	VZIP2 V5.S4, V1.S4, V7.S4	// V7 = fedcba987654 (3)
 
-	SUB $15*2, R6, R6		// account for possible overflow
-	CMP $15*2, R6			// enough space left in the counters?
-
 	// add to counters
 	VUADDW V2.B8, V8.H8, V8.H8
 	VUADDW2 V2.B16, V9.H8, V9.H8
@@ -183,33 +245,14 @@ vec:	VLD1.P 3*16(R1), [V0.B16, V1.B16, V2.B16]
 	VUADDW V7.B8, V14.H8, V14.H8
 	VUADDW2 V7.B16, V15.H8, V15.H8
 
-	BGE have_space
-
-	CALL *R0			// call accumulation function
-	VMOVI $0, V8.B16		// clear counters for next round
-	VMOVI $0, V9.B16
-	VMOVI $0, V10.B16
-	VMOVI $0, V11.B16
-	VMOVI $0, V12.B16
-	VMOVI $0, V13.B16
-	VMOVI $0, V14.B16
-	VMOVI $0, V15.B16
-
-	MOVD $65535, R6			// space left til overflow could occur
-
-have_space:
-	SUBS $15*16, R3, R3		// account for bytes consumed
-	BGE vec	
-
 endvec:	VMOVI $0, V0.B16		// counter registers
 	VMOVI $0, V1.B16
 	VMOVI $0, V2.B16
 	VMOVI $0, V3.B16
 
 	// process tail, 8 bytes at a time
-	ADDS $15*16-8, R3, R3		// 8 bytes left to process?
+	ADDS $16*16-8, R3, R3		// 8 bytes left to process?
 	BLT tail1
-
 
 tail8:	SUBS $8, R3
 	FMOVS.P 4(R1), F6
@@ -218,7 +261,7 @@ tail8:	SUBS $8, R3
 	COUNT4(V2, V3, V7)
 	BGE tail8
 
-	// process remaining 0--7 byte
+	// process remaining 0--7 bytes
 tail1:	ADDS $8, R3			// anything left to process?
 	BLE end
 
@@ -242,6 +285,61 @@ end:	VUADDW V0.B8, V9.H8, V9.H8
 	VUADDW2 V2.B16, V12.H8, V12.H8
 	VUADDW V3.B8, V15.H8, V15.H8
 	VUADDW2 V3.B16, V14.H8, V14.H8
+
+	CALL *R0
+	RET
+
+	// very short input, use tail routine only
+runt:	SUBS $8, R3			// 8 bytes left to process?
+	BLT runt1
+
+	// process runt, 8 bytes at a time
+runt8:	SUBS $8, R3
+	FMOVS.P 4(R1), F6
+	FMOVS.P 4(R1), F7
+	COUNT4(V8, V10, V6)
+	COUNT4(V12, V14, V7)
+	BGE runt8
+
+	// process remaining 0--7 bytes
+	// while making sure we don't get a page fault
+runt1:	ADDS $8, R3			// anything left to process?
+	BLE runt_accum
+
+	AND $7, R1, R5			// offset from 8 byte alignment
+	ADD R5, R3, R8			// length of buffer including alignment
+	LSL $3, R3, R3			// remaining length in bits
+	MOVD $-1, R7
+	LSL R3, R7, R7			// mask of bits where R6 is out of range
+	CMP $8, R8			// if this exceeds an alignment boundary
+	BGE crossrunt1			// we can safely load directly
+
+	AND $~7, R1, R1			// align buffer to 8 bytes
+	MOVD (R1), R6			// and load 8 bytes from buffer
+	LSL $3, R5, R5			// offset from 8 byte alignment in bits
+	LSR R5, R6, R6			// buffer starting at the beginning
+	B dorunt1
+
+crossrunt1:
+	MOVD (R1), R6			// load 8 bytes from unaligned buffer
+
+dorunt1:
+	BIC R7, R6, R6			// clear out of range bits
+	FMOVD R6, F6			// move buffer to SIMD unit
+	VEXT $4, V6.B16, V6.B16, V7.B16
+	COUNT4(V8, V10, V6)
+	COUNT4(V12, V14, V7)
+
+	// initialise counters with tail
+runt_accum:
+	VUXTL V8.B8, V9.H8		//  8--15  89abcdef[0]
+	VUXTL2 V8.B16, V8.H8		//  0-- 7  01234567[0]
+	VUXTL V10.B8, V11.H8		// 24--31  89abcdef[1]
+	VUXTL2 V10.B16, V10.H8		// 16--23  01234567[1]
+	VUXTL V12.B8, V13.H8		// 40--47  89abcdef[2]
+	VUXTL2 V12.B16, V12.H8		// 32--39  01234567[2]
+	VUXTL V14.B8, V15.H8		// 56--63  89abcdef[3]
+	VUXTL2 V14.B16, V14.H8		// 48--55  01234567[3]
 
 	CALL *R0
 	RET
