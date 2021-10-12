@@ -58,14 +58,14 @@ find these results.
 
 
 		amd64		386		arm64		arm
-avx512		90.2 GB/s	---		---		---
-avx2		35.9 GB/s	31.6 GB/s	---		---
-sse2		16.1 GB/s	15.6 GB/s	---		---
-neon		---		---		37.2 GB/s	---
-generic8	1.05 GB/s	297 MB/s	1.68 GB/s	49.0 MB/s
-generic16	1.78 GB/s	1.36 GB/s	3.03 GB/s	67.1 MB/s
-generic32	2.71 GB/s	2.21 GB/s	3.83 GB/s	105 MB/s
-generic64	3.59 GB/s	1.89 GB/s	6.56 GB/s	82.9 MB/s
+avx512		82.1 GB/s	---		---		---
+avx2		34.8 GB/s	31.6 GB/s	---		---
+sse2		16.0 GB/s	15.6 GB/s	---		---
+neon		---		---		36.9 GB/s	---
+generic8	1.02 GB/s	297 MB/s	1.68 GB/s	49.0 MB/s
+generic16	1.71 GB/s	1.36 GB/s	3.03 GB/s	67.1 MB/s
+generic32	2.66 GB/s	2.21 GB/s	3.83 GB/s	105 MB/s
+generic64	3.43 GB/s	1.89 GB/s	6.56 GB/s	82.9 MB/s
 
 The following systems were used for benchmarks, all using Go 1.16:
 
