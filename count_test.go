@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+// Copyright (c) 2020, 2021 Robert Clausecker <fuz@fuz.su>
 
 package pospop
 

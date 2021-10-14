@@ -1,3 +1,5 @@
+// Copyright (c) 2021 Robert Clausecker <fuz@fuz.su>
+
 package pospop
 
 import "fmt"
