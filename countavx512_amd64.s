@@ -125,7 +125,10 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	VMOVDQA64 14*64(SI), Z14
 	VMOVDQA64 15*64(SI), Z17
 	CSA(Z12, Z15, Z16, Z22)
+	ADDQ $16*64, SI
+	PREFETCHT0 (SI)
 	CSA(Z0, Z5, Z6, Z22)
+	PREFETCHT0 64(SI)
 	CSA(Z10, Z12, Z14, Z22)
 	CSA(Z1, Z4, Z7, Z22)
 	CSA(Z11, Z13, Z15, Z22)
@@ -135,8 +138,6 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	CSA(Z1, Z10, Z12, Z22)
 	CSA(Z2, Z5, Z10, Z22)
 	CSA(Z3, Z4, Z5, Z22)
-
-	ADDQ $16*64, SI
 
 	// now Z0..Z4 hold counters; preserve Z0..Z3 for next round and
 	// add Z4 to counters.
