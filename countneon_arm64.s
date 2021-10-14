@@ -79,7 +79,7 @@ TEXT countneon<>(SB), NOSPLIT, $0-0
 	CSA(V0, V16, V17)
 	VMOVI $0x0f, V25.B16		// 0f0f0f0f for extracting nibbles
 	CSA(V0, V18, V19)
-	MOVD $65535-4, R6		// space left til overflow could occur in V8--V15
+	MOVD $65535, R6			// space left til overflow could occur in V8--V15
 	CSAC(V1, V16, V18, V3)
 	VMOVI $0, V9.B16
 	CSA(V0, V4, V5)
@@ -168,7 +168,7 @@ vec:	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 	VUADDW2 V19.B16, V15.H8, V15.H8
 
 	SUB $15*2, R6, R6		// account for possible overflow
-	CMP $15*2, R6			// enough space left in the counters?
+	CMP $(15+15+16)*2, R6		// enough space left in the counters?
 
 	BGE have_space
 

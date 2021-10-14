@@ -105,7 +105,7 @@ TEXT countsse2<>(SB), NOSPLIT, $32-0
 	CSA(X1, X2, X5)
 	ADDQ $15*16, SI
 	CSA(X0, X3, X6)
-	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
+	MOVL $65535, AX			// space left til overflow could occur in Y8--Y11
 	CSA(X1, X3, X7)
 	PXOR X13, X13
 	PXOR X15, X15
@@ -239,7 +239,7 @@ vec:	MOVOA 0*16(SI), X4
 	PADDW X5, X9
 
 	SUBL $16*2, AX			// account for possible overflow
-	CMPL AX, $16*2			// enough space left in the counters?
+	CMPL AX, $(15+15+16)*2		// enough space left in the counters?
 	JGE have_space
 
 	CALL *BX			// call accumulation function

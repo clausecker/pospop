@@ -101,7 +101,7 @@ TEXT countavx512<>(SB), NOSPLIT, $0-0
 
 	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff
 	VPMOVZXBW magic<>+32(SB), Z23	// transposition vector
-	MOVL $65535-8, AX		// space left til overflow could occur in Z8, Z9
+	MOVL $65535, AX			// space left til overflow could occur in Z8, Z9
 
 	// load 1024 bytes from buf, add them to Z0..Z3 into Z0..Z4
 vec:	VMOVDQA64 0*64(SI), Z4
@@ -179,7 +179,7 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	VPADDW Z6, Z9, Z9
 
 	SUBL $16*8, AX			// account for possible overflow
-	CMPL AX, $16*8			// enough space left in the counters?
+	CMPL AX, $(15+15+16)*8		// enough space left in the counters?
 	JGE have_space
 
 	// flush accumulators into counters

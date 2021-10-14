@@ -111,7 +111,7 @@ TEXT countavx2<>(SB), NOSPLIT, $0-0
 	SUBQ $(15+16)*32, CX		// enough data left to process?
 	JLT post
 
-	MOVL $65535-4, AX		// space left til overflow could occur in Y8--Y11
+	MOVL $65535, AX			// space left til overflow could occur in Y8--Y11
 
 	// load 512 bytes from buf, add them to Y0..Y3 into Y0..Y4
 vec:	VMOVDQA 0*32(SI), Y4
@@ -196,7 +196,7 @@ vec:	VMOVDQA 0*32(SI), Y4
 	VPADDW Y5, Y11, Y11
 
 	SUBL $16*4, AX			// account for possible overflow
-	CMPL AX, $16*4			// enough space left in the counters?
+	CMPL AX, $(15+15+16)*4		// enough space left in the counters?
 	JGE have_space
 
 	// flush accumulators into counters
