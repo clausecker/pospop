@@ -58,9 +58,12 @@ func minimizeTestcase64(count64 func(*[64]int, []uint64), tc []uint64) []uint64 
 // build a string representation of the minimised test case if it is
 // not too long.  If it is too long, return the empty string.
 func testcaseString64(tc []uint64) string {
+	if len(tc) == 0 {
+		return "\tvar buf [0]uint64"
+	}
+
 	var w strings.Builder
 	entries := 0
-
 	fmt.Fprintf(&w, "\tvar buf [%d]uint64 // %p\n", len(tc), &tc[0])
 	for i := range tc {
 		if tc[i] == 0 {
