@@ -23,7 +23,13 @@ var testLengths = []int{
 	4*240 - 1, 4 * 240, 4*240 + 1,
 	1023, 1024, 1025,
 	(15+16)*8, (15+16)*16, (15+16)*32, (15+16)*64,
+
+	// long length to trigger counter overflow
+	(255*16+15)*64,
 }
+
+// minimizing the failure causes timeout for long test cases
+const minimizationThreshold = (15+16)*64
 
 // fill counts with random integers
 func randomCounts(counts []int) {
@@ -127,6 +133,10 @@ func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 
 		if counts != refCounts {
 			t.Errorf("length %d: counts don't match: %v\n", len, countDiff(counts[:], refCounts[:]))
+
+			if len > minimizationThreshold {
+				continue
+			}
 
 			min := minimizeTestcase64(count64, buf)
 			tcstr := testcaseString64(min)
