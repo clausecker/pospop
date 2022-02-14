@@ -242,6 +242,7 @@ vec:	MOVOA 0*16(SI), X4
 	CMPL AX, $(15+15+16)*2		// enough space left in the counters?
 	JGE have_space
 
+	PXOR X7, X7
 	CALL *BX			// call accumulation function
 	PXOR X8, X8			// clear counters for next round
 	PXOR X9, X9
@@ -490,43 +491,43 @@ runt_accum:
 	CALL *BX
 	RET
 
-// zero-extend dwords in X trashing X, X1, and X2.  Add the low half
+// zero-extend dwords in X trashing X, X4, and X5.  Add the low half
 // dwords to a*8(DI) and the high half to (a+2)*8(DI).
 // Assumes X7 == 0.
 #define ACCUMQ(a, X) \
-	MOVOA X, X1 \
+	MOVOA X, X4 \
 	PUNPCKLLQ X7, X \
-	PUNPCKHLQ X7, X1 \
-	MOVOU (a)*8(DI), X2 \
-	PADDQ X, X2 \
-	MOVOU X2, (a)*8(DI) \
-	MOVOU (a+2)*8(DI), X2 \
-	PADDQ X1, X2 \
-	MOVOU X2, (a+2)*8(DI)
+	PUNPCKHLQ X7, X4 \
+	MOVOU (a)*8(DI), X5 \
+	PADDQ X, X5 \
+	MOVOU X5, (a)*8(DI) \
+	MOVOU (a+2)*8(DI), X5 \
+	PADDQ X4, X5 \
+	MOVOU X5, (a+2)*8(DI)
 
 // zero-extend words in X to qwords and add to a*8(DI) to (a+7)*8(DI).
-// Assumes X7 == 0 an X8 <= X <= X15.
+// Trashes X4, X5, and X6.  Assumes X7 == 0 an X8 <= X <= X15.
 #define ACCUMO(a, X) \
-	MOVOA X, X0 \
-	PUNPCKLWL X7, X0 \
+	MOVOA X, X6 \
+	PUNPCKLWL X7, X6 \
 	PUNPCKHWL X7, X \
-	ACCUMQ(a, X0) \
+	ACCUMQ(a, X6) \
 	ACCUMQ(a+4, X)
 
 // zero-extend words in X and Y to dwords, sum them, and move the
-// halves back into X and Y.  Assumes X7 == 0.  Trashes X0, X1.
+// halves back into X and Y.  Assumes X7 == 0.  Trashes X4, X5.
 #define FOLDW(X, Y) \
-	MOVOA X, X0 \
+	MOVOA X, X4 \
 	PUNPCKLWL X7, X \
-	PUNPCKHWL X7, X0 \
-	MOVOA Y, X1 \
-	PUNPCKLWL X7, X1 \
+	PUNPCKHWL X7, X4 \
+	MOVOA Y, X5 \
+	PUNPCKLWL X7, X5 \
 	PUNPCKHWL X7, Y \
-	PADDL X1, X \
-	PADDL X0, Y
+	PADDL X5, X \
+	PADDL X4, Y
 
-// Count8 accumulation function.  Accumulates words X0--X7 into
-// 8 qword counters at (DI).  Trashes X0--X12.
+// Count8 accumulation function.  Accumulates words X8--X15 into
+// 8 qword counters at (DI).  Assumes X7 == 0.  Trashes X4--X15.
 TEXT accum8<>(SB), NOSPLIT, $0-0
 	FOLDW(X8, X12)
 	FOLDW(X9, X13)
@@ -542,8 +543,8 @@ TEXT accum8<>(SB), NOSPLIT, $0-0
 	ACCUMQ(4, X12)
 	RET
 
-// Count16 accumulation function.  Accumulates words X0--X7 into
-// 16 qword counters at (DI).  Trashes X0--X12.
+// Count16 accumulation function.  Accumulates words X8--X15 into
+// 16 qword counters at (DI).  Assumes X7 == 0.  Trashes X4--X15.
 TEXT accum16<>(SB), NOSPLIT, $0-0
 	FOLDW(X8, X12)
 	FOLDW(X9, X13)
@@ -559,8 +560,8 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 	ACCUMQ(12, X13)
 	RET
 
-// Count32 accumulation function.  Accumulates words X0--X7 into
-// 32 qword counters at (DI).  Trashes X0--X12.
+// Count32 accumulation function.  Accumulates words X8--X15 into
+// 32 qword counters at (DI).  Assumes X7 == 0.  Trashes X4--X15.
 TEXT accum32<>(SB), NOSPLIT, $0-0
 	FOLDW(X8, X12)
 	ACCUMQ(0, X8)
@@ -576,8 +577,8 @@ TEXT accum32<>(SB), NOSPLIT, $0-0
 	ACCUMQ(28, X15)
 	RET
 
-// Count64 accumulation function.  Accumulates words X0--X7 into
-// 64 qword counters at (DI).  Trashes X0--X12.
+// Count64 accumulation function.  Accumulates words X8--X15 into
+// 64 qword counters at (DI).  Assumes X7 == 0.  Trashes X4--X15.
 TEXT accum64<>(SB), NOSPLIT, $0-0
 	ACCUMO(0, X8)
 	ACCUMO(8, X9)
