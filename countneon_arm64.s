@@ -346,7 +346,7 @@ runt_accum:
 
 TEXT accum8<>(SB), NOSPLIT, $0-0
 	// load counts registers
-	VLD1 (R2), [V0.D2, V1.D2, V2.D2, V3.D2]
+	VLD1 (R2), [V4.D2, V5.D2, V6.D2, V7.D2]
 
 	// zero extend into dwords and fold
 //	VUADDL V8.H4, V10.H4, V16.S4
@@ -375,20 +375,18 @@ TEXT accum8<>(SB), NOSPLIT, $0-0
 	VADD V21.S4, V17.S4, V17.S4
 
 	// accumulate
-	VUADDW V16.S2, V0.D2, V0.D2
-	VUADDW2 V16.S4, V1.D2, V1.D2
-	VUADDW V17.S2, V2.D2, V2.D2
-	VUADDW2 V17.S4, V3.D2, V3.D2
+	VUADDW V16.S2, V4.D2, V4.D2
+	VUADDW2 V16.S4, V5.D2, V5.D2
+	VUADDW V17.S2, V6.D2, V6.D2
+	VUADDW2 V17.S4, V7.D2, V7.D2
 
 	// write back counts registers
-	VST1 [V0.D2, V1.D2, V2.D2, V3.D2], (R2)
+	VST1 [V4.D2, V5.D2, V6.D2, V7.D2], (R2)
 	RET
 
 TEXT accum16<>(SB), NOSPLIT, $0-0
-	// load counts registers
-	VLD1.P 4*16(R2), [V0.D2, V1.D2, V2.D2, V3.D2]
-	VLD1 (R2), [V4.D2, V5.D2, V6.D2, V7.D2]
-	SUB $4*16, R2, R2		// move R2 back to the beginning
+	// load first half of the counts
+	VLD1.P 4*16(R2), [V4.D2, V5.D2, V6.D2, V7.D2]
 
 	// zero extend into dwords and fold
 //	VUADDL V8.H4, V10.H4, V16.S4
@@ -414,19 +412,23 @@ TEXT accum16<>(SB), NOSPLIT, $0-0
 	VADD V22.S4, V18.S4, V18.S4
 	VADD V23.S4, V19.S4, V19.S4
 
+	// load second half of the counts
+	VLD1 (R2), [V20.D2, V21.D2, V22.D2, V23.D2]
+	SUB $4*16, R2, R2		// move R2 back to the beginning
+
 	// accumulate
-	VUADDW V16.S2, V0.D2, V0.D2
-	VUADDW2 V16.S4, V1.D2, V1.D2
-	VUADDW V17.S2, V2.D2, V2.D2
-	VUADDW2 V17.S4, V3.D2, V3.D2
-	VUADDW V18.S2, V4.D2, V4.D2
-	VUADDW2 V18.S4, V5.D2, V5.D2
-	VUADDW V19.S2, V6.D2, V6.D2
-	VUADDW2 V19.S4, V7.D2, V7.D2
+	VUADDW V16.S2, V4.D2, V4.D2
+	VUADDW2 V16.S4, V5.D2, V5.D2
+	VUADDW V17.S2, V6.D2, V6.D2
+	VUADDW2 V17.S4, V7.D2, V7.D2
+	VUADDW V18.S2, V20.D2, V20.D2
+	VUADDW2 V18.S4, V21.D2, V21.D2
+	VUADDW V19.S2, V22.D2, V22.D2
+	VUADDW2 V19.S4, V23.D2, V23.D2
 
 	// write back
-	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R2)
-	VST1 [V4.D2, V5.D2, V6.D2, V7.D2], (R2)
+	VST1.P [V4.D2, V5.D2, V6.D2, V7.D2], 4*16(R2)
+	VST1 [V20.D2, V21.D2, V22.D2, V23.D2], (R2)
 	SUB $4*16, R2, R2		// restore R2
 
 	RET
@@ -437,7 +439,7 @@ TEXT accum32<>(SB), NOSPLIT, $0-0
 	MOVD $2, R9			// counter
 
 	// load counts registers
-loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
+loop:	VLD1.P 4*16(R7), [V20.D2, V21.D2, V22.D2, V23.D2]
 	VLD1.P 4*16(R7), [V4.D2, V5.D2, V6.D2, V7.D2]
 
 	SUB $1, R9, R9
@@ -461,17 +463,17 @@ loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
 	VORR V15.B16, V15.B16, V13.B16
 
 	// accumulate
-	VUADDW V16.S2, V0.D2, V0.D2
-	VUADDW2 V16.S4, V1.D2, V1.D2
-	VUADDW V17.S2, V2.D2, V2.D2
-	VUADDW2 V17.S4, V3.D2, V3.D2
+	VUADDW V16.S2, V20.D2, V20.D2
+	VUADDW2 V16.S4, V21.D2, V21.D2
+	VUADDW V17.S2, V22.D2, V22.D2
+	VUADDW2 V17.S4, V23.D2, V23.D2
 	VUADDW V18.S2, V4.D2, V4.D2
 	VUADDW2 V18.S4, V5.D2, V5.D2
 	VUADDW V19.S2, V6.D2, V6.D2
 	VUADDW2 V19.S4, V7.D2, V7.D2
 
 	// write back
-	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R8)
+	VST1.P [V20.D2, V21.D2, V22.D2, V23.D2], 4*16(R8)
 	VST1.P [V4.D2, V5.D2, V6.D2, V7.D2], 4*16(R8)
 
 	CBNZ R9, loop
@@ -484,7 +486,7 @@ TEXT accum64<>(SB), NOSPLIT, $0-0
 	MOVD $4, R9			// counter
 
 	// load counts registers
-loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
+loop:	VLD1.P 4*16(R7), [V20.D2, V21.D2, V22.D2, V23.D2]
 	VLD1.P 4*16(R7), [V4.D2, V5.D2, V6.D2, V7.D2]
 
 	SUB $1, R9, R9
@@ -506,17 +508,17 @@ loop:	VLD1.P 4*16(R7), [V0.D2, V1.D2, V2.D2, V3.D2]
 	VORR V15.B16, V15.B16, V13.B16
 
 	// accumulate
-	VUADDW V16.S2, V0.D2, V0.D2
-	VUADDW2 V16.S4, V1.D2, V1.D2
-	VUADDW V17.S2, V2.D2, V2.D2
-	VUADDW2 V17.S4, V3.D2, V3.D2
+	VUADDW V16.S2, V20.D2, V20.D2
+	VUADDW2 V16.S4, V21.D2, V21.D2
+	VUADDW V17.S2, V22.D2, V22.D2
+	VUADDW2 V17.S4, V23.D2, V23.D2
 	VUADDW V18.S2, V4.D2, V4.D2
 	VUADDW2 V18.S4, V5.D2, V5.D2
 	VUADDW V19.S2, V6.D2, V6.D2
 	VUADDW2 V19.S4, V7.D2, V7.D2
 
 	// write back
-	VST1.P [V0.D2, V1.D2, V2.D2, V3.D2], 4*16(R8)
+	VST1.P [V20.D2, V21.D2, V22.D2, V23.D2], 4*16(R8)
 	VST1.P [V4.D2, V5.D2, V6.D2, V7.D2], 4*16(R8)
 
 	CBNZ R9, loop
