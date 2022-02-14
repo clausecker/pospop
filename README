@@ -81,7 +81,7 @@ Remaining Work
  * provide variants of Count16, Count32, and Count64 working on byte
    arrays
 
-(c) 2020, 2021 Robert Clausecker <fuz@fuz.su>.  All Rights Reserved.
+(c) 2020--2022 Robert Clausecker <fuz@fuz.su>.  All Rights Reserved.
 
 This code is published under a 2-clause BSD license.  See the file
 COPYING for details.
