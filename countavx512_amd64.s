@@ -171,9 +171,7 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	VPANDND Z4, Z24, Z6
 	VPSRLD $8, Z6, Z6		// Z6 = 8888 9999 aaaa bbbb cccc dddd eeee ffff
 
-	// permute into the right order and accumulate!
-	VPERMW Z5, Z23, Z5		// Z5 = 0123 4567 0123 4567 0123 4567 0123 4567
-	VPERMW Z6, Z23, Z6		// Z6 = 89ab cdef 89ab cdef 89ab cdef 89ab cdef
+	// accumulate in permuted order
 	VPADDW Z5, Z8, Z8
 	VPADDW Z6, Z9, Z9
 
@@ -181,7 +179,9 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	CMPL AX, $(15+15+16)*8		// enough space left in the counters?
 	JGE have_space
 
-	// flush accumulators into counters
+	// fix permutation and flush into counters
+	VPERMW Z8, Z23, Z8		// Z5 = 0123 4567 0123 4567 0123 4567 0123 4567
+	VPERMW Z9, Z23, Z9		// Z6 = 89ab cdef 89ab cdef 89ab cdef 89ab cdef
 	CALL *BX			// call accumulation function
 	VPXOR Y8, Y8, Y8		// clear accumulators for next round
 	VPXOR Y9, Y9, Y9
@@ -190,6 +190,10 @@ vec:	VMOVDQA64 0*64(SI), Z4
 have_space:
 	SUBQ $16*64, CX			// account for bytes consumed
 	JGE vec
+
+	// fix permutation for final step
+	VPERMW Z8, Z23, Z8		// Z5 = 0123 4567 0123 4567 0123 4567 0123 4567
+	VPERMW Z9, Z23, Z9		// Z6 = 89ab cdef 89ab cdef 89ab cdef 89ab cdef
 
 	// sum up Z0..Z3 into the counter registers
 post:	VPSRLD $1, Z0, Z4		// group nibbles in Z0--Z3 into Z4--Z7
