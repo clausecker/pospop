@@ -211,30 +211,30 @@ vec:	MOVOA 0*16(SI), X4
 
 	// split into words and add to counters
 	PSHUFD $0x55, X8, X8		// X8 = 00ff..00ff
-	MOVOA X8, X9
-	PANDN X6, X8			// X8 = 89abcdef[1]
-	PAND X9, X6			// X6 = 01234567[1]
-	PSRLL $8, X8
+	MOVOA X6, X9
+	PAND X8, X6			// X6 = 01234678[1]
+	PSRLW $8, X9			// X9 = 89abcdef[1]
 	PADDW X6, X10
-	PADDW X8, X11
+	PADDW X9, X11
+
+	MOVOA X8, X6
 	MOVOU X8save-32(SP), X8
-	MOVOA X9, X6
-	PANDN X5, X9			// X9 = 89abcdef[2]
+	MOVOA X5, X9
 	PAND X6, X5			// X5 = 01234567[2]
-	PSRLL $8, X9
+	PSRLW $8, X9			// X9 = 89abcdef[2]
 	PADDW X5, X12
 	PADDW X9, X13
+
 	MOVOU X9save-16(SP), X9
-	MOVOA X6, X5
-	PANDN X7, X6			// X6 = 89abcdef[3]
-	PAND X5, X7			// X7 = 01234567[3]
-	PSRLL $8, X6
+	MOVOA X7, X5
+	PAND X6, X7			// X7 = 01234567[3]
+	PSRLW $8, X5			// X5 = 89abcdef[3]
 	PADDW X7, X14
-	PADDW X6, X15
-	MOVOA X5, X6
-	PANDN X4, X5			// X5 = 89abcdef[0]
+	PADDW X5, X15
+
+	MOVOA X4, X5
 	PAND X6, X4			// X4 = 01234567[0]
-	PSRLL $8, X5
+	PSRLW $8, X5			// X5 = 89abcdef[0]
 	PADDW X4, X8
 	PADDW X5, X9
 

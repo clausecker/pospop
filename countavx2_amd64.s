@@ -188,12 +188,10 @@ vec:	VMOVDQA 0*32(SI), Y4
 	// split again into words and add to counters
 	VPAND Y4, Y12, Y6		// Y6 = 01234567[0:1]
 	VPAND Y5, Y12, Y7		// Y7 = 01234567[2:3]
-	VPANDN Y4, Y12, Y4
-	VPANDN Y5, Y12, Y5
 	VPADDW Y6, Y8, Y8
 	VPADDW Y7, Y10, Y10
-	VPSRLD $8, Y4, Y4		// Y4 = 89abcdef[0:1]
-	VPSRLD $8, Y5, Y5		// Y5 = 89abcdef[2:3]
+	VPSRLW $8, Y4, Y4		// Y4 = 89abcdef[0:1]
+	VPSRLW $8, Y5, Y5		// Y5 = 89abcdef[2:3]
 	VPADDW Y4, Y9, Y9
 	VPADDW Y5, Y11, Y11
 

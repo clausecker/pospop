@@ -167,9 +167,8 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	VPADDD Z10, Z11, Z4		// Z4 = 08x4 19x4 2ax4 3bx4 4cx4 5dx4 6ex4 7fx4
 
 	// split again into 16 bit counters
+	VPSRLW $8, Z4, Z6		// Z6 = 8888 9999 aaaa bbbb cccc dddd eeee ffff
 	VPANDD Z4, Z24, Z5		// Z5 = 0000 1111 2222 3333 4444 5555 6666 7777
-	VPANDND Z4, Z24, Z6
-	VPSRLD $8, Z6, Z6		// Z6 = 8888 9999 aaaa bbbb cccc dddd eeee ffff
 
 	// accumulate in permuted order
 	VPADDW Z5, Z8, Z8
