@@ -336,7 +336,7 @@ countavx2:
 	sub		%rcx, %rax		# adjust window mask pointer
 	vmovq		(%rax), %xmm5		# load window mask
 	vpandn		%xmm6, %xmm5, %xmm6	# and mask out the desired bytes
-	vpsrldq		$4, %xmm6, %xmm5	# obtain second dword in X5
+	vpsrldq		$4, %xmm6, %xmm5	# obtain second dword in XMM5
 	count8		%xmm6, %xmm5
 
 	# add tail to counters
@@ -410,5 +410,144 @@ countavx2:
 	vzeroupper
 	ret
 	.size		countavx2, .-countavx2
+
+	# zero extend YMM8--YMM11 into dwords and fold the upper
+	# 32 counters over the lower 32 counters, leaving the
+	# registers with
+	# YMM12 contains  0- 3, 16-19
+	# YMM8  contains  4- 7, 20-23
+	# YMM14 contains  8-11, 24-27
+	# YMM9  contains 12-15, 28-31
+	# assumes YMM7 == 0
+	.macro		fold32
+	vpunpcklwd	%ymm7, %ymm8, %ymm12
+	vpunpckhwd	%ymm7, %ymm8, %ymm8
+	vpunpcklwd	%ymm7, %ymm9, %ymm14
+	vpunpckhwd	%ymm7, %ymm9, %ymm9
+	vpunpcklwd	%ymm7, %ymm10, %ymm4
+	vpunpckhwd	%ymm7, %ymm10, %ymm10
+	vpunpcklwd	%ymm7, %ymm11, %ymm5
+	vpunpckhwd	%ymm7, %ymm11, %ymm11
+	vpaddd		%ymm12, %ymm4, %ymm12
+	vpaddd		%ymm8, %ymm10, %ymm8
+	vpaddd		%ymm14, %ymm5, %ymm14
+	vpaddd		%ymm9, %ymm11, %ymm9
+	.endm
+
+	# zero-extend dwords in Y trashing y and z.  Add the low
+	# half dwords to a*8(%rdi) and the high half to b*8(%rdi).
+	# assumes YMM7 == 0
+	.macro		accum a, b, y, z
+	vpermq		$0xd8, \y, \z
+	vpunpckhdq	%ymm7, \y, \z
+	vpunpckldq	%ymm7, \y, \y
+	vpaddq		\a*8(%rdi), \y, \y
+	vpaddq		\b*8(%rdi), \z, \z
+	vmovdqu		\y, \a*8(%rdi)
+	vmovdqu		\z, \b*8(%rdi)
+	.endm
+
+	.type		accum8, @function
+	.balign		16
+accum8:	vpaddd		%ymm14, %ymm12, %ymm12
+	vpaddd		%ymm9, %ymm8, %ymm8
+	vperm2i128	$0x20, %ymm8, %ymm12, %ymm14
+	vperm2i128	$0x31, %ymm8, %ymm12, %ymm4
+	vpaddd		%ymm4, %ymm14, %ymm12
+	accum		0, 4, %ymm12, %ymm14
+	ret
+	.size		accum8, .-accum8
+
+	.type		accum16, @function
+	.balign		16
+accum16:
+	fold32
+	vperm2i128	$0x20, %ymm8, %ymm12, %ymm4
+	vperm2i128	$0x31, %ymm8, %ymm12, %ymm10
+	vpaddd		%ymm4, %ymm10, %ymm12
+	vperm2i128	$0x20, %ymm9, %ymm14, %ymm5
+	vperm2i128	$0x31, %ymm9, %ymm14, %ymm11
+	accum		0, 4, %ymm12, %ymm14
+	accum		8, 12, %ymm4, %ymm5
+	ret
+	.size		accum16, .-accum16
+
+	.type		accum32, @function
+	.balign		16
+accum32:
+	fold32
+	accum		0, 16, %ymm12, %ymm4
+	accum		4, 20, %ymm8, %ymm4
+	accum		8, 24, %ymm14, %ymm4
+	accum		12, 28, %ymm9, %ymm4
+	ret
+	.size		accum32, .-accum32
+
+	# accumulate the 16 counters in Y into k*8(%rdi) to
+	# (k+15)*8(%rdi).  Trashes YMM0--YMM3.  Assumes YMM7 == 0.
+	.macro		accum64 k, y
+	vpunpcklwd	%ymm7, \y, %ymm12
+	vpunpckhwd	%ymm7, \y, %ymm14
+	accum		\k, \k+16, %ymm12, %ymm4
+	accum		\k+4, \k+20, %ymm14, %ymm4
+	.endm
+
+	.type		accum64, @function
+	.balign		16
+accum64:
+	accum64		0, %ymm8
+	accum64		8, %ymm9
+	accum64		32, %ymm10
+	accum64		40, %ymm11
+	ret
+	.size		accum64, .-accum64
+
+	.globl		count8avx2, count16avx2, count32avx2, count64avx2
+
+	.type		count8avx2, @function
+	.balign		16
+count8avx2:
+	push		%rbx
+	lea		accum8(%rip), %rbx
+	mov		%rdx, %rcx
+	call		countavx2
+	pop		%rbx
+	ret
+	.size		count8avx2, .-count8avx2
+
+	.type		count16avx2, @function
+	.balign		16
+count16avx2:
+	push		%rbx
+	lea		accum16(%rip), %rbx
+	lea		(%rdx, %rdx, 1), %rcx
+	call		countavx2
+	pop		%rbx
+	ret
+	.size		count16avx2, .-count16avx2
+
+	.type		count32avx2, @function
+	.balign		16
+count32avx2:
+	push		%rbx
+	lea		accum32(%rip), %rbx
+	mov		%rdx, %rcx
+	shl		$2, %rcx
+	call		countavx2
+	pop		%rbx
+	ret
+	.size		count32avx2, .-count32avx2
+
+	.type		count64avx2, @function
+	.balign		16
+count64avx2:
+	push		%rbx
+	lea		accum64(%rip), %rbx
+	mov		%rdx, %rcx
+	shl		$3, %rcx
+	call		countavx2
+	pop		%rbx
+	ret
+	.size		count64avx2, .-count64avx2
 
 	.section	.note.GNU-stack,"",%progbits
