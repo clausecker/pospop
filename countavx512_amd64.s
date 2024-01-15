@@ -6,12 +6,10 @@
 // Required CPU extensions: BMI2, AVX-512 -F, -BW.
 
 // magic constants
-DATA magic<>+ 0(SB)/8, $0x0706050403020100
-DATA magic<>+ 8(SB)/8, $0x8040201008040201
-DATA magic<>+16(SB)/4, $0x55555555
-DATA magic<>+20(SB)/4, $0x33333333
-DATA magic<>+24(SB)/4, $0x0f0f0f0f
-DATA magic<>+28(SB)/4, $0x00ff00ff
+DATA magic<>+ 0(SB)/4, $0x55555555
+DATA magic<>+ 4(SB)/4, $0x33333333
+DATA magic<>+ 8(SB)/4, $0x0f0f0f0f
+DATA magic<>+12(SB)/4, $0x00ff00ff
 
 // permutation vectors for the last permutation step of the vec loop
 // permutes words
@@ -20,11 +18,11 @@ DATA magic<>+28(SB)/4, $0x00ff00ff
 // into the order used by the counters:
 // Q1 = 0123 4567 0123 4567 0123 4567 0123 4567
 // Q2 = 89AB CDEF 89AB CDEF 89AB CDEF 89AB CDEF
-DATA magic<>+32(SB)/8, $0x1c1814100c080400
-DATA magic<>+40(SB)/8, $0x1d1915110d090501
-DATA magic<>+48(SB)/8, $0x1e1a16120e0a0602
-DATA magic<>+56(SB)/8, $0x1f1b17130f0b0703
-GLOBL magic<>(SB), RODATA|NOPTR, $64
+DATA magic<>+16(SB)/8, $0x1c1814100c080400
+DATA magic<>+24(SB)/8, $0x1d1915110d090501
+DATA magic<>+32(SB)/8, $0x1e1a16120e0a0602
+DATA magic<>+40(SB)/8, $0x1f1b17130f0b0703
+GLOBL magic<>(SB), RODATA|NOPTR, $48
 
 // B:A = A+B+C, D used as scratch space
 #define CSA(A, B, C, D) \
@@ -37,29 +35,19 @@ GLOBL magic<>(SB), RODATA|NOPTR, $64
 // counters in DI and an array length in CX.
 TEXT countavx512<>(SB), NOSPLIT, $0-0
 	// head and tail constants, counter registers
-	VMOVQ magic<>+0(SB), X1		// 0706050403020100
-	VPBROADCASTQ magic<>+8(SB), Z31	// 8040201008040201
 	VPTERNLOGD $0xff, Z30, Z30, Z30	// ffffffff
 	VPXORD Y25, Y25, Y25		// zero register
-
-	// turn X15 into a set of qword masks in Z29
-	VPUNPCKLBW X1, X1, X1		// 7766:5544:3322:1100
-	VPERMQ $0x50, Y1, Y1		// 7766:5544:7766:5544:3322:1100:3322:1100
-	VPUNPCKLWD Y1, Y1, Y1		// 7777:6666:5555:4444:3333:2222:1111:0000
-	VPMOVZXDQ Y1, Z1		// -7:-6:-5:-4:-3:-2:-1:-0
-	VPSHUFD $0xa0, Z1, Z29		// 77:66:55:44:33:22:11:00
 
 	CMPQ CX, $15*64			// is the CSA kernel worth using?
 	JLT runt
 
 	// compute misalignment mask
-	MOVL SI, DX
-	ANDL $63, DX			// offset of the buffer start from 64 byte alignment
 	MOVQ $-1, AX
-	SUBQ DX, SI			// align source to 64 byte
-	ADDQ DX, CX			// account for head length in CX
-	SHLXQ DX, AX, AX		// mask out the head of the load
+	SHLXQ SI, AX, AX		// mask out the head of the load
 	KMOVQ AX, K1			// prepare mask register
+	ADDQ SI, CX
+	ANDQ $~63, SI			// align source to 64 byte
+	SUBQ SI, CX			// account for head length in CX
 
 	VMOVDQU8.Z 0*64(SI), K1, Z0	// load 960 bytes from buf
 	VMOVDQA64 1*64(SI), Z1		// and sum them into Z3:Z2:Z1:Z0
@@ -82,9 +70,9 @@ TEXT countavx512<>(SB), NOSPLIT, $0-0
 	VMOVDQA64 13*64(SI), Z5
 	VMOVDQA64 14*64(SI), Z10
 	CSA(Z11, Z12, Z13, Z22)
-	VPBROADCASTD magic<>+16(SB), Z28 // 0x55555555 for transposition
-	VPBROADCASTD magic<>+20(SB), Z27 // 0x33333333 for transposition
-	VPBROADCASTD magic<>+24(SB), Z26 // 0x0f0f0f0f for transposition
+	VPBROADCASTD magic<>+0(SB), Z28 // 0x55555555 for transposition
+	VPBROADCASTD magic<>+4(SB), Z27 // 0x33333333 for transposition
+	VPBROADCASTD magic<>+8(SB), Z26 // 0x0f0f0f0f for transposition
 	CSA(Z4, Z5, Z10, Z22)
 	CSA(Z0, Z2, Z6, Z22)
 	CSA(Z1, Z3, Z7, Z22)
@@ -97,8 +85,8 @@ TEXT countavx512<>(SB), NOSPLIT, $0-0
 	SUBQ $(15+16)*64, CX		// enough data left to process?
 	JLT post
 
-	VPBROADCASTD magic<>+28(SB), Z24 // 0x00ff00ff
-	VPMOVZXBW magic<>+32(SB), Z23	// transposition vector
+	VPBROADCASTD magic<>+12(SB), Z24 // 0x00ff00ff
+	VPMOVZXBW magic<>+16(SB), Z23	// transposition vector
 	MOVL $65535, AX			// space left til overflow could occur in Z8, Z9
 
 	// load 1024 bytes from buf, add them to Z0..Z3 into Z0..Z4
@@ -274,18 +262,20 @@ post:	VPSRLD $1, Z0, Z4		// group nibbles in Z0--Z3 into Z4--Z7
 endvec:	VPXOR Y0, Y0, Y0		// counter register
 
 	// process tail, 8 bytes at a time
+	CMPL CX, $-16*64		// no bytes left to process?
+	JE end
 	SUBL $8-16*64, CX		// 8 bytes left to process?
-	JLT tail1
+	JLE tail1
 
 tail8:	KMOVQ (SI), K1
 	ADDQ $8, SI
-	SUBL $8, CX
 	VPSUBB Z30, Z0, K1, Z0
+	SUBL $8, CX
 	JGT tail8
 
-	// process remaining 0--7 bytes
+	// process remaining 1--8 bytes
 tail1:	MOVL $8*8(CX*8), CX
-	BZHIQ CX, (SI), AX		// load tail into AX
+	BZHIQ CX, (SI), AX		// load tail into AX (will never fault)
 	KMOVQ AX, K1
 	VPSUBB Z30, Z0, K1, Z0
 
@@ -296,7 +286,7 @@ tail1:	MOVL $8*8(CX*8), CX
 	VPADDW Z2, Z9, Z9
 
 	// and perform a final accumulation
-	CALL *BX
+end:	CALL *BX
 	VZEROUPPER
 	RET
 
@@ -304,16 +294,20 @@ tail1:	MOVL $8*8(CX*8), CX
 	// one iteration of the kernel
 runt:	VPXOR Y0, Y0, Y0		// counter register
 	SUBL $8, CX			// 8 bytes left to process?
-	JLT runtrunt			// input of 0--7 bytes?
+	JLE runtrunt			// input of 0--8 bytes?
 
 runt8:	KMOVQ (SI), K1
 	ADDQ $8, SI
-	SUBL $8, CX
 	VPSUBB Z30, Z0, K1, Z0
+	SUBQ $8, CX
 	JGT runt8
 
-	MOVL $8*8(CX*8), CX
-	BZHIQ CX, (SI), AX		// load tail into AX
+	// process last 1--7 bytes
+	// as SI has no particular alignment, we cannot savely overread
+	// instead overlap previous chunk and shift out junk
+	MOVL $(CX*8), DX
+	NEGL DX				// number of bits to be masked out
+	SHRXQ DX, (SI)(CX*1), AX
 	KMOVQ AX, K1
 	VPSUBB Z30, Z0, K1, Z0
 
@@ -324,17 +318,16 @@ runt8:	KMOVQ (SI), K1
 	VZEROUPPER
 	RET
 
-	// process runt of 0--7 bytes
+	// process runt of 0--8 bytes
 runtrunt:
 	ADDL $8, CX
 	XORL AX, AX
 	BTSL CX, AX			// 1 << CX
 	DECL AX				// mask of CX ones
 	KMOVD AX, K1
-	VMOVDQU8.Z (SI), K1, X4
-	VPBROADCASTQ X4, Z4
-	VPSHUFB Z29, Z4, Z4
-	VPTESTMB Z31, Z4, K1
+	VMOVDQU8.Z (SI), K1, X4		// just the runt bytes
+	VMOVQ X4, AX
+	KMOVQ AX, K1
 	VPSUBB Z30, Z0, K1, Z0
 
 	// populate counters and accumulate
