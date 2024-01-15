@@ -277,30 +277,20 @@ endvec:	VPXOR Y0, Y0, Y0		// counter register
 	SUBL $8-16*64, CX		// 8 bytes left to process?
 	JLT tail1
 
-tail8:	VPBROADCASTQ (SI), Z4
+tail8:	KMOVQ (SI), K1
 	ADDQ $8, SI
-	VPSHUFB Z29, Z4, Z4
 	SUBL $8, CX
-	VPTESTMB Z31, Z4, K1
 	VPSUBB Z30, Z0, K1, Z0
 	JGT tail8
 
 	// process remaining 0--7 bytes
-tail1:	SUBL $-8, CX
-	JLE end				// anything left to process?
-
-	VPBROADCASTQ (SI), Z4
-	VPSHUFB Z29, Z4, Z4
-	XORL AX, AX
-	BTSL CX, AX			// 1 << CX
-	DECL AX				// bit mask of CX ones
-	KMOVB AX, K1			// move into a mask register
-	VMOVDQA64.Z Z4, K1, Z4		// mask out the bytes that aren't in the tail
-	VPTESTMB Z31, Z4, K1
+tail1:	MOVL $8*8(CX*8), CX
+	BZHIQ CX, (SI), AX		// load tail into AX
+	KMOVQ AX, K1
 	VPSUBB Z30, Z0, K1, Z0
 
 	// add tail to counters
-end:	VPUNPCKLBW Z25, Z0, Z1
+	VPUNPCKLBW Z25, Z0, Z1
 	VPUNPCKHBW Z25, Z0, Z2
 	VPADDW Z1, Z8, Z8
 	VPADDW Z2, Z9, Z9
@@ -314,18 +304,29 @@ end:	VPUNPCKLBW Z25, Z0, Z1
 	// one iteration of the kernel
 runt:	VPXOR Y0, Y0, Y0		// counter register
 	SUBL $8, CX			// 8 bytes left to process?
-	JLT runt1
+	JLT runtrunt			// input of 0--7 bytes?
 
-runt8:	VPBROADCASTQ (SI), Z4
+runt8:	KMOVQ (SI), K1
 	ADDQ $8, SI
-	VPSHUFB Z29, Z4, Z4
 	SUBL $8, CX
-	VPTESTMB Z31, Z4, K1
 	VPSUBB Z30, Z0, K1, Z0
-	JGE runt8
+	JGT runt8
 
-	// process remaining 0--8 bytes
-runt1:	ADDL $8, CX
+	MOVL $8*8(CX*8), CX
+	BZHIQ CX, (SI), AX		// load tail into AX
+	KMOVQ AX, K1
+	VPSUBB Z30, Z0, K1, Z0
+
+	// populate counters and accumulate
+	VPUNPCKLBW Z25, Z0, Z8
+	VPUNPCKHBW Z25, Z0, Z9
+	CALL *BX
+	VZEROUPPER
+	RET
+
+	// process runt of 0--7 bytes
+runtrunt:
+	ADDL $8, CX
 	XORL AX, AX
 	BTSL CX, AX			// 1 << CX
 	DECL AX				// mask of CX ones
@@ -337,7 +338,7 @@ runt1:	ADDL $8, CX
 	VPSUBB Z30, Z0, K1, Z0
 
 	// populate counters and accumulate
-runt0:	VPUNPCKLBW Z25, Z0, Z8
+	VPUNPCKLBW Z25, Z0, Z8
 	VPUNPCKHBW Z25, Z0, Z9
 	CALL *BX
 	VZEROUPPER
