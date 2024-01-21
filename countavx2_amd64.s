@@ -375,7 +375,7 @@ runt1:	ADDL $8, CX			// anything left to process?
 	MOVQ $-1, R9
 	SHLQ CX, R9			// mask of bits where R8 is out of range
 	CMPL DX, $8			// if this exceeds the alignment boundary
-	JGE crossrunt1			// we can safely load directly
+	JGT crossrunt1			// we can safely load directly
 
 	ANDQ $~7, SI			// align buffer to 8 bytes
 	MOVQ (SI), R8			// and load 8 bytes from buffer
