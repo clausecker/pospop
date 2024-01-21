@@ -312,7 +312,7 @@ runt1:	ADDS $8, R3			// anything left to process?
 	MOVD $-1, R7
 	LSL R3, R7, R7			// mask of bits where R6 is out of range
 	CMP $8, R8			// if this exceeds an alignment boundary
-	BGE crossrunt1			// we can safely load directly
+	BGT crossrunt1			// we can safely load directly
 
 	AND $~7, R1, R1			// align buffer to 8 bytes
 	MOVD (R1), R6			// and load 8 bytes from buffer
