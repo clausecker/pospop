@@ -32,10 +32,9 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 	PXOR C, A \
 	POR D, B
 
-// Process 4 bytes from S.  Add low word counts to L, high to H
+// Process 4 bytes from X4.  Add low word counts to L, high to H
 // assumes mask loaded into X2.  Trashes X4, X5.
-#define COUNT4(L, H, S) \
-	MOVD S, X4 \			// X4 = ----:----:----:3210
+#define COUNT4(L, H) \			// X4 = ----:----:----:3210
 	PUNPCKLBW X4, X4 \		// X4 = ----:----:3322:1100
 	PUNPCKLWL X4, X4 \		// X4 = 3333:2222:1111:0000
 	PSHUFD $0xfa, X4, X5 \		// X5 = 3333:3333:2222:2222
@@ -97,13 +96,17 @@ norunt:	SUBL AX, BP			// mark head as accounted for
 	ADDL AX, SI			// and advance past the head
 
 	// process head in four increments of 4 bytes
-	COUNT4(X0, X1, X7)
+	MOVOA X7, X4
 	PSRLO $4, X7
-	COUNT4(X2, X3, X7)
+	COUNT4(X0, X1)
+	MOVOA X7, X4
 	PSRLO $4, X7
-	COUNT4(X0, X1, X7)
+	COUNT4(X2, X3)
+	MOVOA X7, X4
 	PSRLO $4, X7
-	COUNT4(X2, X3, X7)
+	COUNT4(X0, X1)
+	MOVOA X7, X4
+	COUNT4(X2, X3)
 
 	// produce 16 byte aligned pointer to counter vector in DX
 nohead:	MOVL $counts-144+15(SP), DX
@@ -314,8 +317,10 @@ endvec:	MOVQ magic<>+0(SB), X6		// bit position mask
 	SUBL $8-15*16, BP		// 8 bytes left to process?
 	JLT tail1
 
-tail8:	COUNT4(X0, X1, (SI))
-	COUNT4(X2, X3, 4(SI))
+tail8:	MOVL (SI), X4
+	COUNT4(X0, X1)
+	MOVL 4(SI), X4
+	COUNT4(X2, X3)
 	ADDL $8, SI
 	SUBL $8, BP
 	JGE tail8
@@ -332,9 +337,11 @@ tail1:	SUBL $-8, BP			// anything left to process?
 	PANDN X5, X7			// and mask out the desired bytes
 
 	// process rest
-	COUNT4(X0, X1, X7)
+	MOVOA X7, X4
 	PSRLO $4, X7
-	COUNT4(X2, X3, X7)
+	COUNT4(X0, X1)
+	MOVOA X7, X4
+	COUNT4(X2, X3)
 
 	// add tail to counters
 end:	PXOR X7, X7			// zero register
