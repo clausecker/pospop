@@ -27,10 +27,9 @@ GLOBL window<>(SB), RODATA|NOPTR, $32
 	POR  C, B \
 	PXOR A, B
 
-// Process 4 bytes from S.  Add low word counts to L, high to H
+// Process 4 bytes from X4.  Add low word counts to L, high to H
 // assumes mask loaded into X2.  Trashes X4, X5.
-#define COUNT4(L, H, S) \
-	MOVD S, X4 \			// X4 = ----:----:----:3210
+#define COUNT4(L, H) \			// X4 = ----:----:----:3210
 	PUNPCKLBW X4, X4 \		// X4 = ----:----:3322:1100
 	PUNPCKLWL X4, X4 \		// X4 = 3333:2222:1111:0000
 	PSHUFD $0xfa, X4, X5 \		// X5 = 3333:3333:2222:2222
@@ -383,8 +382,10 @@ endvec:	MOVQ magic<>+0(SB), X6		// bit position mask
 	SUBL $8-16*16, CX		// 8 bytes left to process?
 	JLT tail1
 
-tail8:	COUNT4(X0, X1, 0(SI))
-	COUNT4(X2, X3, 4(SI))
+tail8:	MOVL 0(SI), X4
+	COUNT4(X0, X1)
+	MOVL 4(SI), X4
+	COUNT4(X2, X3)
 	ADDQ $8, SI
 	SUBL $8, CX
 	JGE tail8
@@ -401,9 +402,11 @@ tail1:	SUBL $-8, CX			// anything left to process?
 	PANDN X5, X7			// and mask out the desired bytes
 
 	// process rest
-	COUNT4(X0, X1, X7)
+	MOVOA X7, X4
+	COUNT4(X0, X1)
 	PSRLO $4, X7
-	COUNT4(X2, X3, X7)
+	MOVOA X7, X4
+	COUNT4(X2, X3)
 
 	// add tail to counters
 end:	PXOR X7, X7			// zero register
@@ -436,8 +439,10 @@ runt:	SUBL $8, CX			// 8 bytes left to process?
 	JLT runt1
 
 	// process runt 8 bytes at a time
-runt8:	COUNT4(X8, X10, 0(SI))
-	COUNT4(X12, X14, 4(SI))
+runt8:	MOVL 0(SI), X4
+	COUNT4(X8, X10)
+	MOVL 4(SI), X4
+	COUNT4(X12, X14)
 	ADDQ $8, SI
 	SUBL $8, CX
 	JGE runt8
@@ -455,7 +460,7 @@ runt1:	ADDL $8, CX			// anything left to process?
 	BTSQ CX, R9
 	DECQ R9				// mask of bits where R8 is in range
 	CMPL DX, $8			// if this exceeds the alignment boundary
-	JGE crossrunt1			// we can safely load directly
+	JGT crossrunt1			// we can safely load directly
 
 	ANDQ $~7, SI			// align buffer to 8 bytes
 	MOVQ (SI), R8			// and and load 8 bytes from buffer
@@ -468,10 +473,11 @@ crossrunt1:
 
 dorunt1:
 	ANDQ R9, R8			// mask out bytes behind the buffer
-	MOVQ R8, X3
-	COUNT4(X8, X10, X3)
-	PSRLO $4, X3
-	COUNT4(X12, X14, X3)
+	MOVL R8, X4
+	SHRQ $32, R8
+	COUNT4(X8, X10)
+	MOVL R8, X4
+	COUNT4(X12, X14)
 
 	// move tail to counters and perform final accumulation
 runt_accum:
