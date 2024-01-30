@@ -22,28 +22,28 @@ func count64sse2(counts *[64]int, buf []uint64)
 
 var count8funcs = []count8impl{
 	{count8avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
-	{count8avx2, "avx2", cpu.X86.HasAVX2},
+	{count8avx2, "avx2", cpu.X86.HasBMI2 && cpu.X86.HasAVX2},
 	{count8sse2, "sse2", cpu.X86.HasSSE2},
 	{count8generic, "generic", true},
 }
 
 var count16funcs = []count16impl{
 	{count16avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
-	{count16avx2, "avx2", cpu.X86.HasAVX2},
+	{count16avx2, "avx2", cpu.X86.HasBMI2 && cpu.X86.HasAVX2},
 	{count16sse2, "sse2", cpu.X86.HasSSE2},
 	{count16generic, "generic", true},
 }
 
 var count32funcs = []count32impl{
 	{count32avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
-	{count32avx2, "avx2", cpu.X86.HasAVX2},
+	{count32avx2, "avx2", cpu.X86.HasBMI2 && cpu.X86.HasAVX2},
 	{count32sse2, "sse2", cpu.X86.HasSSE2},
 	{count32generic, "generic", true},
 }
 
 var count64funcs = []count64impl{
 	{count64avx512, "avx512", cpu.X86.HasBMI2 && cpu.X86.HasAVX512BW},
-	{count64avx2, "avx2", cpu.X86.HasAVX2},
+	{count64avx2, "avx2", cpu.X86.HasBMI2 && cpu.X86.HasAVX2},
 	{count64sse2, "sse2", cpu.X86.HasSSE2},
 	{count64generic, "generic", true},
 }
