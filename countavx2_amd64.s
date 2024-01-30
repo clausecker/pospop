@@ -3,7 +3,7 @@
 // An AVX2 based kernel first doing a 15-fold CSA reduction and then
 // a 16-fold CSA reduction, carrying over place-value vectors between
 // iterations.
-// Required CPU extension: AVX2.
+// Required CPU extension: AVX2, BMI2.
 
 // magic transposition constants, comparison constants
 DATA magic<>+ 0(SB)/8, $0x0000000000000000
@@ -304,7 +304,10 @@ post:	VPBROADCASTD magic<>+80(SB), Y14 // 0x0f0f0f0f
 	VPADDW Y6, Y10, Y10
 	VPADDW Y1, Y11, Y11
 
-endvec:	VPBROADCASTQ magic<>+64(SB), Y2	// byte mask
+endvec:	CMPL CX, $-16*32		// no bytes left to process?
+	JE end
+
+	VPBROADCASTQ magic<>+64(SB), Y2	// byte mask
 	VMOVDQU magic<>+0(SB), Y3	// permutation mask
 	VMOVDQU magic<>+32(SB), Y7
 	VPXOR Y0, Y0, Y0		// lower counter register
@@ -312,27 +315,21 @@ endvec:	VPBROADCASTQ magic<>+64(SB), Y2	// byte mask
 
 	// process tail, 8 bytes at a time
 	SUBL $8-16*32, CX		// 8 bytes left to process?
-	JLT tail1
+	JLE tail1
 
 tail8:	COUNT8((SI))
 	ADDQ $8, SI
 	SUBL $8, CX
-	JGE tail8
+	JGT tail8
 
 	// process remaining 0--7 byte
-tail1:	SUBL $-8, CX			// anything left to process?
-	JLE end
-
-	VMOVQ (SI), X6			// load 8 byte from buffer.  This is ok
-					// as buffer is aligned to 8 byte here
-	MOVQ $window<>+32(SB), AX	// load window address
-	SUBQ CX, AX			// adjust mask pointer
-	VMOVQ (AX), X5			// load window mask
-	VPANDN X6, X5, X6		// and mask out the desired bytes
+tail1:	MOVL $8*8(CX*8), CX
+	BZHIQ CX, (SI), AX		// load tail into AX (will never fault)
+	VMOVQ AX, X6
 	COUNT8(X6)
 
 	// add tail to counters
-end:	VPXOR Y7, Y7, Y7
+	VPXOR Y7, Y7, Y7
 	VPUNPCKLBW Y7, Y0, Y4
 	VPUNPCKHBW Y7, Y0, Y5
 	VPUNPCKLBW Y7, Y1, Y6
@@ -344,7 +341,7 @@ end:	VPXOR Y7, Y7, Y7
 	VPADDW Y7, Y11, Y11
 
 	// and perform a final accumulation
-	VPXOR Y7, Y7, Y7
+end:	VPXOR Y7, Y7, Y7
 	CALL *BX
 	VZEROUPPER
 	RET
