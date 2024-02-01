@@ -322,7 +322,7 @@ tail8:	COUNT8((SI))
 	SUBL $8, CX
 	JGT tail8
 
-	// process remaining 0--7 byte
+	// process remaining 1--8 bytes
 tail1:	MOVL $8*8(CX*8), CX
 	BZHIQ CX, (SI), AX		// load tail into AX (will never fault)
 	VMOVQ AX, X6
@@ -363,27 +363,24 @@ runt8:	COUNT8((SI))
 
 	// process remaining 0--7 byte
 	// while making sure we don't get a page fault
-runt1:	ADDL $8, CX			// anything left to process?
+runt1:	CMPL CX, $-8			// anything left to process?
 	JLE runt_accum
 
-	MOVL SI, AX
-	ANDL $7, AX			// offset from 8 byte alignment
-	LEAL (AX)(CX*1), DX		// length of buffer plus alignment
-	SHLL $3, CX			// remaining length in bits
-	MOVQ $-1, R9
-	SHLQ CX, R9			// mask of bits where R8 is out of range
-	CMPL DX, $8			// if this exceeds the alignment boundary
-	JGT crossrunt1			// we can safely load directly
+	LEAL 7(SI)(CX*1), DX		// last address of buffer
+	XORL SI, DX			// which bits changed?
+	LEAL 8*8(CX*8), CX		// CX scaled to a bit length
+	TESTL $8, DX			// did we cross an alignment boundary?
+	JNE crossrunt1			// if yes, we can safely load directly
 
+	LEAL (SI*8), AX
 	ANDQ $~7, SI			// align buffer to 8 bytes
 	MOVQ (SI), R8			// and load 8 bytes from buffer
-	SHLL $3, AX			// offset from 8 byte alignment in bits
 	SHRXQ AX, R8, R8		// buffer starting at the beginning
-	ANDNQ R8, R9, R8
+	BZHIQ CX, R8, R8		// mask out bytes past the buffer
 	JMP dorunt1
 
 crossrunt1:
-	ANDNQ (SI), R9, R8		// load 8 bytes from unaligned buffer
+	BZHIQ CX, (SI), R8		// load 8 bytes from unaligned buffer
 
 dorunt1:VMOVQ R8, X6
 	COUNT8(X6)
