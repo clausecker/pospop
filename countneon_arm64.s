@@ -167,7 +167,7 @@ vec:	VLD1.P 4*16(R1), [V4.B16, V5.B16, V6.B16, V7.B16]
 	VUADDW V19.B8, V14.H8, V14.H8
 	VUADDW2 V19.B16, V15.H8, V15.H8
 
-	SUB $15*2, R6, R6		// account for possible overflow
+	SUB $16*2, R6, R6		// account for possible overflow
 	CMP $(15+15+16)*2, R6		// enough space left in the counters?
 
 	BGE have_space
