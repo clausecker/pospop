@@ -163,7 +163,7 @@ vec:	VMOVDQA64 0*64(SI), Z4
 	VPADDW Z6, Z9, Z9
 
 	SUBL $16*8, AX			// account for possible overflow
-	CMPL AX, $(15+15+16)*8		// enough space left in the counters?
+	CMPL AX, $(15+15)*8		// enough space left in the counters?
 	JGE have_space
 
 	// fix permutation and flush into counters

@@ -194,7 +194,7 @@ vec:	VMOVDQA 0*32(SI), Y4
 	VPADDW Y5, Y11, Y11
 
 	SUBL $16*4, AX			// account for possible overflow
-	CMPL AX, $(15+15+16)*4		// enough space left in the counters?
+	CMPL AX, $(15+15)*4		// enough space left in the counters?
 	JGE have_space
 
 	// flush accumulators into counters

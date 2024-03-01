@@ -238,7 +238,7 @@ vec:	MOVOA 0*16(SI), X4
 	PADDW X5, X9
 
 	SUBL $16*2, AX			// account for possible overflow
-	CMPL AX, $(15+15+16)*2		// enough space left in the counters?
+	CMPL AX, $(15+15)*2		// enough space left in the counters?
 	JGE have_space
 
 	PXOR X7, X7
