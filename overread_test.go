@@ -1,4 +1,4 @@
-// +build unix
+//go:build unix
 
 // Copyright (c) 2024 Robert Clausecker <fuz@fuz.su>
 

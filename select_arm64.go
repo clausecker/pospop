@@ -1,6 +1,4 @@
-// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
-
-//+build arm64,go1.16
+// Copyright (c) 2020, 2024 Robert Clausecker <fuz@fuz.su>
 
 package pospop
 
