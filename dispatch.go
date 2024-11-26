@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Robert Clausecker <fuz@fuz.su>
+// Copyright (c) 2020, 2024 Robert Clausecker <fuz@fuz.su>
 
 // Positional population counts.
 //
@@ -20,6 +20,8 @@
 // See the example on the Count8 function for what the positional
 // population count operation does.
 package pospop
+
+import "unsafe"
 
 // each platform must provide arrays count8funcs, coun16funcs,
 // count32funcs, and count64funcs of type count8impl, ... listing
@@ -98,6 +100,15 @@ var count64func = func() func(*[64]int, []uint64) {
 
 	panic("no implementation of count64 available")
 }()
+
+// Count the number of corresponding set bits of the bytes in str and
+// add the results to counts.  Each element of counts keeps track of a
+// different place; counts[0] for 0x01, counts[1] for 0x02, and so on to
+// counts[7] for 0x80.
+func CountString(counts *[8]int, str string) {
+	buf := unsafe.Slice(unsafe.StringData(str), len(str))
+	count8func(counts, buf)
+}
 
 // Count the number of corresponding set bits of the bytes in buf and
 // add the results to counts.  Each element of counts keeps track of a

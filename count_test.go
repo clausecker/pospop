@@ -1,4 +1,4 @@
-// Copyright (c) 2020--2022 Robert Clausecker <fuz@fuz.su>
+// Copyright (c) 2020--2022, 2024 Robert Clausecker <fuz@fuz.su>
 
 package pospop
 
@@ -145,6 +145,11 @@ func testCount64(t *testing.T, count64 func(*[64]int, []uint64)) {
 			}
 		}
 	}
+}
+
+// test the correctness of CountString
+func TestCountString(t *testing.T) {
+	testCount8(t, func(counts *[8]int, buf []uint8) { CountString(counts, string(buf)) })
 }
 
 // test the correctness of all Count8 implementations
