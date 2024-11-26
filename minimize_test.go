@@ -36,7 +36,7 @@ func minimizeTestcase64(count64 func(*[64]int, []uint64), tc []uint64) []uint64 
 	// try to turn off bits
 	for i := len(tc) - 1; i >= 0; i-- {
 		for j := 63; j >= 0; j-- {
-			if tc[i] & (1 << j) == 0 {
+			if tc[i]&(1<<j) == 0 {
 				continue
 			}
 

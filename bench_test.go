@@ -17,7 +17,7 @@ var benchmarkLengthsShort = []int{100 * 1000}
 // benchmark a count8 implementation
 func benchmarkCount8(b *testing.B, buf []uint8, lengths []int, count8 func(*[8]int, []uint8)) {
 	for _, l := range lengths {
-		b.Run(strconv.Itoa(l) + "B", func(b *testing.B) {
+		b.Run(strconv.Itoa(l)+"B", func(b *testing.B) {
 			var counts [8]int
 			testbuf := buf[:l]
 			b.SetBytes(int64(l) * 1)
