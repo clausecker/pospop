@@ -10,7 +10,7 @@ To use this library, import it as follows:
     import "github.com/clausecker/pospop"
 
 You can then count populations using the Count8, Count16, Count32,
-and Count64 functions:
+Count64, and CountString functions:
 
     var counts [8]int
     pospop.Count8(&counts, buf)
@@ -34,11 +34,8 @@ Implementations are provided for the following SIMD extensions:
  * generic kernel (all architectures)
 
 The three kernels for amd64 correspond to the v4, v3, and v1 values
-of the upcoming GOAMD64 environment variable.
-
-Due to some required improvements in the assembler, the NEON kernel will
-only be available on Go 1.16 or newer.  When building with earlier
-versions of the tool chain, only the generic kernel is available.
+of the GOAMD64 environment variable.  However, all kernels are
+compiled in regardless of what value GOAMD64 is set to.
 
 The library automatically chooses the fastest available kernel for
 the system it is running on.
@@ -46,11 +43,11 @@ the system it is running on.
 Performance
 -----------
 
-As all functions
-(Count8, Count16, Count32, Count64) of one set are based on the
-same kernel with a different accumulation function, they all perform
-equally well.  This does not apply to the generic implementations
-whose performance is therefore given for every function individually.
+As all functions (Count8, Count16, Count32, Count64, CountString) of
+one set are based on the same kernel with a different accumulation
+function, they all perform equally well.  This does not apply to the
+generic implementations whose performance is therefore given for every
+function individually.
 
 The following performance table is grouped by the instruction set used
 and the architecture it runs on.  A buffer size of 100 kB was used to
