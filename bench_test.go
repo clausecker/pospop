@@ -1,4 +1,4 @@
-// Copyright (c) 2020, 2021 Robert Clausecker <fuz@fuz.su>
+// Copyright (c) 2020--2022, 2025 Robert Clausecker <fuz@fuz.su>
 
 package pospop
 
@@ -30,7 +30,7 @@ func benchmarkCount8(b *testing.B, buf []uint8, lengths []int, count8 func(*[8]i
 
 // benchmark all Count8 implementations
 func BenchmarkCount8(b *testing.B) {
-	funcs := count8funcs
+	funcs := append(count8funcs, count8dummy...)
 	lengths := benchmarkLengths
 
 	// short benchmark: only test the implementation
@@ -71,7 +71,7 @@ func benchmarkCount16(b *testing.B, buf []uint16, lengths []int, count16 func(*[
 
 // benchmark all Count16 implementations
 func BenchmarkCount16(b *testing.B) {
-	funcs := count16funcs
+	funcs := append(count16funcs, count16dummy...)
 	lengths := benchmarkLengths
 
 	// short benchmark: only test the implementation
@@ -114,7 +114,7 @@ func benchmarkCount32(b *testing.B, buf []uint32, lengths []int, count32 func(*[
 
 // benchmark all Count32 implementations
 func BenchmarkCount32(b *testing.B) {
-	funcs := count32funcs
+	funcs := append(count32funcs, count32dummy...)
 	lengths := benchmarkLengths
 
 	// short benchmark: only test the implementation
@@ -157,7 +157,7 @@ func benchmarkCount64(b *testing.B, buf []uint64, lengths []int, count64 func(*[
 
 // benchmark all Count64 implementations
 func BenchmarkCount64(b *testing.B) {
-	funcs := count64funcs
+	funcs := append(count64funcs, count64dummy...)
 	lengths := benchmarkLengths
 
 	// short benchmark: only test the implementation
