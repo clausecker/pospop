@@ -1,6 +1,6 @@
 // Copyright (c) 2025 Robert Clausecker <fuz@fuz.su>
 
-//go:build !arm64
+//go:build !arm64 && !amd64
 
 package pospop
 
