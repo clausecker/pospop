@@ -12,17 +12,17 @@ var count8dummy = []count8impl{
 var count16dummy = []count16impl{
 	{dummyCount16avx512, "dummyAvx512", cpu.X86.HasAVX512},
 	{dummyCount16avx, "dummyAvx", cpu.X86.HasAVX && !cpu.X86.HasAVX512},
-	{dummyCount16sse, "dummySse", !cpu.X86.HasAVX}, 
+	{dummyCount16sse, "dummySse", !cpu.X86.HasAVX},
 }
 var count32dummy = []count32impl{
 	{dummyCount32avx512, "dummyAvx512", cpu.X86.HasAVX512},
 	{dummyCount32avx, "dummyAvx", cpu.X86.HasAVX && !cpu.X86.HasAVX512},
-	{dummyCount32sse, "dummySse", !cpu.X86.HasAVX}, 
+	{dummyCount32sse, "dummySse", !cpu.X86.HasAVX},
 }
 var count64dummy = []count64impl{
 	{dummyCount64avx512, "dummyAvx512", cpu.X86.HasAVX512},
 	{dummyCount64avx, "dummyAvx", cpu.X86.HasAVX && !cpu.X86.HasAVX512},
-	{dummyCount64sse, "dummySse", !cpu.X86.HasAVX}, 
+	{dummyCount64sse, "dummySse", !cpu.X86.HasAVX},
 }
 
 // dummy Count8 implementation that performs no work
