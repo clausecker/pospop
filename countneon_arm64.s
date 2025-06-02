@@ -1,5 +1,3 @@
-//+build arm64,go1.16
-
 #include "textflag.h"
 
 // A NEON based kernel first doing a 15-fold CSA reduction and then a
