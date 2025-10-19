@@ -371,7 +371,7 @@ count8neon:
 	str	x30, [sp, #-5*16]!
 	st1	{v8.1d-v11.1d}, [x3], #32
 	st1	{v12.1d-v15.1d}, [x3], #32
-	mov	w3, w2
+	mov	x3, x2
 	mov	x2, x0
 	adr	x0, accum8
 	bl	countneon
@@ -389,7 +389,7 @@ count16neon:
 	str	x30, [sp, #-5*16]!
 	st1	{v8.1d-v11.1d}, [x3], #32
 	st1	{v12.1d-v15.1d}, [x3], #32
-	ubfiz	x3, x2, #1, #32
+	lsl	x3, x2, #1
 	mov	x2, x0
 	adr	x0, accum16
 	bl	countneon
@@ -407,7 +407,7 @@ count32neon:
 	str	x30, [sp, #-5*16]!
 	st1	{v8.1d-v11.1d}, [x3], #32
 	st1	{v12.1d-v15.1d}, [x3], #32
-	ubfiz	x3, x2, #2, #32
+	lsl	x3, x2, #2
 	mov	x2, x0
 	adr	x0, accum32
 	bl	countneon
@@ -425,7 +425,7 @@ count64neon:
 	str	x30, [sp, #-5*16]!
 	st1	{v8.1d-v11.1d}, [x3], #32
 	st1	{v12.1d-v15.1d}, [x3], #32
-	ubfiz	x3, x2, #3, #32
+	lsl	x3, x2, #3
 	mov	x2, x0
 	adr	x0, accum64
 	bl	countneon
