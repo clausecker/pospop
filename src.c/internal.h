@@ -1,30 +1,32 @@
-void	count8generic(uint64_t[restrict 8], const uint8_t *, size_t);
-void	count16generic(uint64_t[restrict 16], const uint16_t *, size_t);
-void	count32generic(uint64_t[restrict 32], const uint32_t *, size_t);
-void	count64generic(uint64_t[restrict 64], const uint64_t *, size_t);
+typedef void count8func(uint64_t[restrict 8], const uint8_t *, size_t);
+typedef void count16func(uint64_t[restrict 16], const uint16_t *, size_t);
+typedef void count32func(uint64_t[restrict 32], const uint32_t *, size_t);
+typedef void count64func(uint64_t[restrict 64], const uint64_t *, size_t);
+
+struct countfuncs {
+	count8func	*count8;
+	count16func	*count16;
+	count32func	*count32;
+	count64func	*count64;
+};
+
+count8func count8generic;
+count16func count16generic;
+count32func count32generic;
+count64func count64generic;
 
 #ifdef __amd64__
-void	count8sse2(uint64_t[restrict 8], const uint8_t *, size_t);
-void	count16sse2(uint64_t[restrict 16], const uint16_t *, size_t);
-void	count32sse2(uint64_t[restrict 32], const uint32_t *, size_t);
-void	count64sse2(uint64_t[restrict 64], const uint64_t *, size_t);
-
-void	count8avx2(uint64_t[restrict 8], const uint8_t *, size_t);
-void	count16avx2(uint64_t[restrict 16], const uint16_t *, size_t);
-void	count32avx2(uint64_t[restrict 32], const uint32_t *, size_t);
-void	count64avx2(uint64_t[restrict 64], const uint64_t *, size_t);
-
-void	count8avx512(uint64_t[restrict 8], const uint8_t *, size_t);
-void	count16avx512(uint64_t[restrict 16], const uint16_t *, size_t);
-void	count32avx512(uint64_t[restrict 32], const uint32_t *, size_t);
-void	count64avx512(uint64_t[restrict 64], const uint64_t *, size_t);
+count8func count8sse2, count8avx2, count8avx512;
+count16func count16sse2, count16avx2, count16avx512;
+count32func count32sse2, count32avx2, count32avx512;
+count64func count64sse2, count64avx2, count64avx512;
 #endif
 
 #ifdef __aarch64__
-void	count8neon(uint64_t[restrict 8], const uint8_t *, size_t);
-void	count16neon(uint64_t[restrict 16], const uint16_t *, size_t);
-void	count32neon(uint64_t[restrict 32], const uint32_t *, size_t);
-void	count64neon(uint64_t[restrict 64], const uint64_t *, size_t);
+count8func count8neon;
+count16func count16neon;
+count32func count32neon;
+count64func count64neon;
 #endif
 
 static inline void
