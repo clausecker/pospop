@@ -1,3 +1,5 @@
+#ifdef __aarch64__
+
 #include "kernelneon.S"
 
 accum8:
@@ -111,3 +113,5 @@ accum64:
 	st1	{v4.2d-v7.2d}, [x8], #64
 	cbnz	x9, 0b
 	ret
+
+#endif /* defined(__aarch64__) */

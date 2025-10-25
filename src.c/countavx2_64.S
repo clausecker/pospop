@@ -1,3 +1,4 @@
+#ifdef __amd64__
 #include "kernelavx2.S"
 
 	.type   accum8, @function
@@ -182,3 +183,5 @@ accum64:
 	vmovdqu [rdi+0x1E0], ymm4
 	ret
 	.size	accum64, .-accum64
+
+#endif /* defined(__amd64__) */

@@ -1,3 +1,5 @@
+#ifdef __amd64__
+
 #include "kernelavx512.S"
 
 	.balign 16
@@ -122,3 +124,5 @@ accum64:
 	vmovdqu64 [rdi+0x6*0x40], zmm3
 	vmovdqu64 [rdi+0x7*0x40], zmm4
 	ret
+
+#endif /* defined(__amd64__) */

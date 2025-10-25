@@ -1,3 +1,5 @@
+#ifdef __amd64__
+
 #include "kernelsse2.S"
 
 	.type   accum8, @function
@@ -422,3 +424,5 @@ accum64:
 	movdqu  [rdi+0x1F0], xmm5
 	ret
 	.size	accum64, .-accum64
+
+#endif /* defined(__amd64__) */
