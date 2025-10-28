@@ -3,12 +3,12 @@
 	.section .rodata
 	.balign	16
 magic:	.quad	0x8040201008040201
-	.int	0xaaaaaaaa
 	.int	0x55555555
-	.int	0xcccccccc
+	.int	0xaaaaaaaa
 	.int	0x33333333
-	.int	0x00ff00ff
+	.int	0xcccccccc
 	.int	0x0f0f0f0f
+	.int	0x00ff00ff
 	.size	magic, .-magic
 
 window:	.quad	0, 0, -1, -1
