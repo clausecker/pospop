@@ -73,10 +73,10 @@ countgeneric(accum_func *accum, uint64_t *restrict counts, const uint64_t *buf, 
 	csa(&c2, &b, b6, b7, b8);
 	csa(&d, &c, c0, c1, c2);
 
-	buf += 8 * 15;
+	buf += 15;
 	len -= 8 * 15;
 
-	while (len >= 8 * 16) {
+	while (len >= 16 * 8) {
 		if (countcap < 16) {
 			accum(counts, counters);
 			countcap = COUNT_MAX;
@@ -107,6 +107,8 @@ countgeneric(accum_func *accum, uint64_t *restrict counts, const uint64_t *buf, 
 			counters[i] += 16 * (e >> i & 1);
 
 		countcap -= 16;
+		buf += 16;
+		len -= 16 * 8;
 	}
 
 	/* transpose and process d:b:c:a */

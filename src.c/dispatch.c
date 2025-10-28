@@ -3,6 +3,7 @@
 
 #ifdef __amd64__
 static const struct countfuncs sse2funcs = {
+	.family = "sse2",
 	.count8 = count8sse2,
 	.count16 = count16sse2,
 	.count32 = count32sse2,
@@ -10,6 +11,7 @@ static const struct countfuncs sse2funcs = {
 };
 
 static const struct countfuncs avx2funcs = {
+	.family = "avx2",
 	.count8 = count8avx2,
 	.count16 = count16avx2,
 	.count32 = count32avx2,
@@ -17,6 +19,7 @@ static const struct countfuncs avx2funcs = {
 };
 
 static const struct countfuncs avx512funcs = {
+	.family = "avx512",
 	.count8 = count8avx512,
 	.count16 = count16avx512,
 	.count32 = count32avx512,

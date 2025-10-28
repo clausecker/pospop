@@ -4,6 +4,7 @@ typedef void count32func(uint64_t[restrict 32], const uint32_t *, size_t);
 typedef void count64func(uint64_t[restrict 64], const uint64_t *, size_t);
 
 struct countfuncs {
+	const char	*family;
 	count8func	*count8;
 	count16func	*count16;
 	count32func	*count32;
