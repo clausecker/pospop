@@ -41,7 +41,7 @@ countgeneric(accum_func *accum, uint64_t *restrict counts, const uint64_t *buf, 
 	word ba0, ba1, dc0, dc1, dcba0, dcba1, dcba2, dcba3;
 	size_t misalignment, countcap = COUNT_MAX, i, origlen;
 
-	memset(counts, 0, sizeof counters);
+	memset(counters, 0, sizeof counters);
 
 	misalignment = (uintptr_t)buf & 7;
 #if BYTE_ORDER == LITTLE_ENDIAN
