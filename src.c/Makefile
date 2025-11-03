@@ -12,8 +12,8 @@ LIBOBJ=		countavx2_64.o countavx512_64.o countgeneric.o countneon_64.o \
 
 all: lib${LIBNAME}.so lib${LIBNAME}.a
 
-lib${LIBNAME}.so: ${LIBOBJ}
-	${CC} -shared -o $@ -Wl,-soname=lib${LIBNAME}.so.${SOMAJOR} ${LIBOBJ}
+lib${LIBNAME}.so: ${LIBOBJ} libpospop.map
+	${CC} -shared -o $@ -Wl,--version-script=libpospop.map -Wl,-soname=lib${LIBNAME}.so.${SOMAJOR} ${LIBOBJ}
 
 lib${LIBNAME}.a: ${LIBOBJ}
 	${AR} crs $@ ${LIBOBJ}

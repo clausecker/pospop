@@ -1,0 +1,8 @@
+pospop0 {
+global:	pospopcount8;
+	pospopcount16;
+	pospopcount32;
+	pospopcount64;
+
+local:	*;
+};		
