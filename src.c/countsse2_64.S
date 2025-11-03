@@ -2,6 +2,7 @@
 
 #include "kernelsse2.S"
 
+	.text
 	.type   accum8, @function
 	.balign	16
 accum8:	movdqa  xmm4, xmm8

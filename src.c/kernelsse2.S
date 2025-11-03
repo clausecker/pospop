@@ -656,3 +656,5 @@ count64sse2:
 	pop     rbp
 	ret
 	.size	count64sse2, .-count64sse2
+
+	.section .note.GNU-stack,"",%progbits

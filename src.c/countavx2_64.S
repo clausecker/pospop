@@ -1,6 +1,7 @@
 #ifdef __amd64__
 #include "kernelavx2.S"
 
+	.text
 	.type   accum8, @function
 	.balign	16
 accum8:	vpunpcklwd ymm12, ymm8, ymm7

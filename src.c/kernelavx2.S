@@ -512,3 +512,5 @@ count64avx2:
 	pop	rbp
 	ret
 	.size   count64avx2, .-count64avx2
+
+	.section .note.GNU-stack,"",%progbits

@@ -2,10 +2,10 @@
 
 #include "kernelavx512.S"
 
-	.balign 16
-accum8:
+	.text
 	.type   accum8, @function
-	vpmovzxwq zmm0, xmm8
+	.balign 16
+accum8:	vpmovzxwq zmm0, xmm8
 	vextracti64x2 xmm1, zmm8, 0x01
 	vpmovzxwq zmm1, xmm1
 	vextracti64x2 xmm2, zmm8, 0x02
@@ -30,9 +30,9 @@ accum8:
 	vmovdqu64 [rdi], zmm0
 	ret
 
+	.type   accum16, @function
 	.balign 16
 accum16:
-	.type   accum16, @function
 	vpmovzxwq zmm10, xmm8
 	vextracti64x2 xmm11, zmm8, 0x01
 	vpmovzxwq zmm11, xmm11
@@ -59,9 +59,9 @@ accum16:
 	vmovdqu64 [rdi+0x1*0x40], zmm14
 	ret
 
+	.type   accum32, @function
 	.balign 16
 accum32:
-	.type   accum32, @function
 	vextracti64x2 xmm2, zmm8, 0x02
 	vextracti64x2 xmm3, zmm9, 0x02
 	vpmovzxwq zmm0, xmm8
@@ -90,9 +90,9 @@ accum32:
 	vmovdqu64 [rdi+0x3*0x40], zmm1
 	ret
 
+	.type   accum64, @function
 	.balign 16
 accum64:
-	.type   accum64, @function
 	vpmovzxwq zmm3, xmm8
 	vpmovzxwq zmm4, xmm9
 	vpaddq  zmm3, zmm3, [rdi]
