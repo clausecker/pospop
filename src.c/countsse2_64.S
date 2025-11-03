@@ -427,3 +427,5 @@ accum64:
 	.size	accum64, .-accum64
 
 #endif /* defined(__amd64__) */
+
+	.section .note.GNU-stack,"",%progbits

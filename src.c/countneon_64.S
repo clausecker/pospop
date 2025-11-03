@@ -115,3 +115,5 @@ accum64:
 	ret
 
 #endif /* defined(__aarch64__) */
+
+	.section .note.GNU-stack,"",%progbits
