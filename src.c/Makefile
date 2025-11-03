@@ -1,6 +1,6 @@
 LIBNAME=	pospop
 SOMAJOR=	0
-SOMINOR=	0
+SOMINOR=	1
 
 CC?=		cc
 AR?=		ar
