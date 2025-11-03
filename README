@@ -18,6 +18,9 @@ Count64, and CountString functions:
 The positional population count for buf is added to the contents of
 counts.
 
+A C version of this library is provided in the src.c subdirectory.
+Refer to the README file in there for details.
+
 Supported Platforms
 -------------------
 

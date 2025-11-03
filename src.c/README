@@ -1,0 +1,47 @@
+High-performance vectorised positional popcount routines for C
+==============================================================
+
+This directory contains a variant of the pospop library usable
+by C and C++ code.  The following kernels are provided:
+
+ * amd64 / AVX-512
+ * amd64 / AVX2
+ * amd64 / SSE2
+ * aarch64 / NEON
+ * generic C (any platform)
+
+The code assumes an ELF ABI and SysV / AAPCS calling convention.
+If you wish to use it on other targets, please let me know and
+I can try to provide a port.
+
+The API is as follows:
+
+    void pospopcount8(uint64_t[8] counts, const uint8_t *buf, size_t len);
+    void pospopcount16(uint64_t[16] counts, const uint16_t *buf, size_t len);
+    void pospopcount32(uint64_t[32] counts, const uint32_t *buf, size_t len);
+    void pospopcount64(uint64_t[64] counts, const uint64_t *buf, size_t len);
+
+The library can be linked as -lpospop following succesful build.
+
+To integrate the code into your own build system, add the following
+files to your build:
+
+    *countavx2_64.S
+    *countavx512_64.S
+    *countgeneric.c
+    *countneon_64.S
+    *countsse2_64.S
+    *dispatch.c
+     internal.h
+     kernelavx2.S
+     kernelavx512.S
+     kernelneon.S
+     kernelsse2.S
+     pospop.h
+
+Only files marked with an asterisk (*) should be built into object files.
+
+(c) 2020--2025 Robert Clausecker <fuz@fuz.su>.  All Rights Reserved.
+
+This code is published under a 2-clause BSD license.  See the file
+COPYING in the parent directory for details.
