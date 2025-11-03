@@ -75,25 +75,25 @@ count16func pospopcount16 __attribute__((ifunc("count16resolver")));
 count32func pospopcount32 __attribute__((ifunc("count32resolver")));
 count64func pospopcount64 __attribute__((ifunc("count64resolver")));
 
-static count8func *
+static count8func * __attribute__((used))
 count8resolver(void)
 {
 	return (find_pospop_impl()->count8);
 }
 
-static count16func *
+static count16func * __attribute__((used))
 count16resolver(void)
 {
 	return (find_pospop_impl()->count16);
 }
 
-static count32func *
+static count32func * __attribute__((used))
 count32resolver(void)
 {
 	return (find_pospop_impl()->count32);
 }
 
-static count64func *
+static count64func * __attribute__((used))
 count64resolver(void)
 {
 	return (find_pospop_impl()->count64);
