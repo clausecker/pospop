@@ -2,11 +2,13 @@ LIBNAME=	pospop
 SOMAJOR=	0
 SOMINOR=	1
 
-CC?=		cc
 AR?=		ar
-RM?=		rm -f
-LN?=		ln
+CC?=		cc
 INSTALL?=	install
+LN?=		ln
+RM?=		rm -f
+SH?=		sh
+
 CFLAGS+=	-fpic -g -Wall -Wextra -Wno-parentheses
 
 PREFIX?=	/usr/local
@@ -24,6 +26,10 @@ lib${LIBNAME}.a: ${LIBOBJ}
 
 test: test.o lib${LIBNAME}.a
 	${CC} -o $@ test.o lib${LIBNAME}.a
+
+.PHONY: check
+check: test
+	${SH} dotest.sh
 
 .PHONY: install
 install: lib${LIBNAME}.so lib${LIBNAME}.a
