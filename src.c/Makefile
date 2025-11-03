@@ -5,7 +5,7 @@ SOMINOR=	0
 CC?=		cc
 AR?=		ar
 RM?=		rm -f
-CFLAGS+=	-fpic -g
+CFLAGS+=	-fpic -g -Wall -Wextra -Wno-parentheses
 
 LIBOBJ=		countavx2_64.o countavx512_64.o countgeneric.o countneon_64.o \
 		countsse2_64.o dispatch.o
