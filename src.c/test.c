@@ -122,6 +122,8 @@ main(int argc, char *argv[])
 	res |= check_count32((const uint32_t *)buf + misalignment / 4, size / 4);
 	res |= check_count16((const uint16_t *)buf + misalignment / 2, size / 2);
 	res |= check_count8((const uint8_t *)buf + misalignment, size);
+
+	return (res);
 }
 
 static void set_single(char *buf, size_t len)
