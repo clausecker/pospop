@@ -5,7 +5,11 @@ SOMINOR=	0
 CC?=		cc
 AR?=		ar
 RM?=		rm -f
+LN?=		ln
+INSTALL?=	install
 CFLAGS+=	-fpic -g -Wall -Wextra -Wno-parentheses
+
+PREFIX?=	/usr/local
 
 LIBOBJ=		countavx2_64.o countavx512_64.o countgeneric.o countneon_64.o \
 		countsse2_64.o dispatch.o
@@ -20,6 +24,15 @@ lib${LIBNAME}.a: ${LIBOBJ}
 
 test: test.o lib${LIBNAME}.a
 	${CC} -o $@ test.o lib${LIBNAME}.a
+
+.PHONY: install
+install: lib${LIBNAME}.so lib${LIBNAME}.a
+	${INSTALL} -d ${PREFIX}/lib ${PREFIX}/include
+	${INSTALL} -m 0644 pospop.h ${PREFIX}/include/
+	${INSTALL} -m 0755 lib${LIBNAME}.a ${PREFIX}/lib/
+	${INSTALL} -m 0755 lib${LIBNAME}.so ${PREFIX}/lib/lib${LIBNAME}.so.${SOMAJOR}.${SOMINOR}
+	${LN} -s -f lib${LIBNAME}.so.${SOMAJOR}.${SOMINOR} ${PREFIX}/lib/lib${LIBNAME}.so.${SOMAJOR}
+	${LN} -s -f lib${LIBNAME}.so.${SOMAJOR}.${SOMINOR} ${PREFIX}/lib/lib${LIBNAME}.so
 
 .PHONY: clean
 clean:
