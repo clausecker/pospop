@@ -2,8 +2,15 @@ High-performance vectorised positional popcount routines for Go
 ===============================================================
 
 This repository contains implementations of the positional population
-count functions for Go.  Details on the algorithms used will be
-published in a future research paper.
+count functions for Go using an algorithm described in our publication
+
+    Clausecker, Lemire, Schintke: Faster Positional‐Population Counts
+    for AVX2, AVX‐512, and ASIMD, Concurrency and Computation: Practice
+    and Experience, vo. 37, no. 27--28, Wiley, 2025.
+
+Our publication is open access and can be found on line at
+
+    http://dx.doi.org/10.1002/cpe.70435
 
 To use this library, import it as follows:
 
@@ -72,6 +79,21 @@ The following systems were used for benchmarks, all using Go 1.16:
  * amd64, 386: Intel(R) Xeon(R) Gold 6138 CPU @ 2.00GHz
  * arm64: Apple M1
  * arm: ARM Cortex-A72 r0p3 (Raspberry Pi 4B)
+
+Citation
+--------
+
+If you use this code in a scientific publication, please cite:
+
+    @article{clausecker2025pospop,
+     title={Faster Positional-Population Counts for AVX2, AVX-512, and ASIMD},
+     author={Robert Clausecker and Daniel Lemire and Florian Schintke},
+     journal={Concurrency and Computation: Practice and Experience},
+     volume={37},
+     number={27--28},
+     year={2025},
+     publisher={Wiley Online Library}
+    }
 
 Remaining Work
 --------------
